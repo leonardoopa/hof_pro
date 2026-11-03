@@ -28,6 +28,7 @@ INSTALLED_APPS = [
     "apps.inventory",
     "apps.consent",
     "apps.guidance",
+    "apps.audit",
 ]
 
 MIDDLEWARE = [

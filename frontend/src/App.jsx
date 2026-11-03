@@ -11,6 +11,7 @@ import GuidancePage from './guidance/GuidancePage'
 import PatientsPage from './pages/PatientsPage'
 import PatientWorkspace from './pages/PatientWorkspace'
 import PlanningStep from './pages/PlanningStep'
+import ReportsPage from './pages/ReportsPage'
 
 function Protected({ children }) {
   const { user, loading } = useAuth()
@@ -41,6 +42,7 @@ export default function App() {
           <Route path="resumo" element={<GuidancePage />} />
         </Route>
         <Route path="/estoque" element={<InventoryPage />} />
+        <Route path="/relatorios" element={<ReportsPage />} />
         <Route
           path="/financeiro"
           element={<ComingSoon title="Financeiro" text="Orçamentos e recebimentos ligados ao plano de cada paciente." />}

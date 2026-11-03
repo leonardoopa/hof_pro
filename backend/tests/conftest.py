@@ -4,12 +4,20 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
+from api import ratelimit
 from api.main import create_app
 from apps.clinical.models import AnamnesisQuestion
 
 # O banco de teste é limpo a cada teste (transaction=True), inclusive as perguntas semeadas
 # pela migration; os testes que precisam delas usam a fixture `questions`.
 pytestmark = pytest.mark.django_db(transaction=True)
+
+
+@pytest.fixture(autouse=True)
+def _reset_login_rate_limit():
+    ratelimit.reset()
+    yield
+    ratelimit.reset()
 
 
 @pytest.fixture
