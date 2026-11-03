@@ -1,11 +1,13 @@
 import { Camera, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import Modal from '../components/Modal'
+import PoseGuide from '../evolution/PoseGuide'
 
 export default function CameraCapture({ onCapture, onClose }) {
   const videoRef = useRef(null)
   const [error, setError] = useState('')
   const [ready, setReady] = useState(false)
+  const [guide, setGuide] = useState(true)
 
   useEffect(() => {
     let stream
@@ -39,9 +41,15 @@ export default function CameraCapture({ onCapture, onClose }) {
       {error ? (
         <div className="alert error">{error}</div>
       ) : (
-        <video ref={videoRef} className="camera" autoPlay playsInline muted onLoadedMetadata={() => setReady(true)} />
+        <div className="camera-wrap">
+          <video ref={videoRef} className="camera" autoPlay playsInline muted onLoadedMetadata={() => setReady(true)} />
+          {guide && <PoseGuide />}
+        </div>
       )}
       <p className="camera-hint">Rosto de frente, olhar para a câmera, cabelo afastado da testa e boa luz.</p>
+      <label className="guide-toggle">
+        <input type="checkbox" checked={guide} onChange={(e) => setGuide(e.target.checked)} /> Guia de pose (oval, olhos e eixo central)
+      </label>
       <div className="modal-actions">
         <button className="btn" onClick={onClose}>
           <X size={16} /> Fechar

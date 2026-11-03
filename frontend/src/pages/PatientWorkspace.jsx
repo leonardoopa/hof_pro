@@ -8,6 +8,7 @@ import { ageFrom } from './PatientsPage'
 const STEPS = [
   { to: 'anamnese', label: 'Anamnese' },
   { to: 'planejamento', label: 'Planejamento' },
+  { to: 'evolucao', label: 'Evolução' },
   { to: 'prontuario', label: 'Prontuário / Termos' },
   { to: 'resumo', label: 'Resumo e Orientações' },
 ]
