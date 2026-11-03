@@ -2,6 +2,7 @@ import { FileSignature, Printer, ShieldCheck } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { api } from '../api/client'
+import ConfirmModal from '../components/ConfirmModal'
 import ErrorList from '../components/ErrorList'
 import Modal from '../components/Modal'
 import SignaturePad from '../components/SignaturePad'
@@ -104,6 +105,7 @@ export default function ConsentStep() {
   const [trace, setTrace] = useState(null)
   const [error, setError] = useState(null)
   const [signing, setSigning] = useState(null)
+  const [revoking, setRevoking] = useState(null) // assinatura a revogar
   const [toast, toastNode] = useToast()
 
   const load = useCallback(async () => {
@@ -124,7 +126,6 @@ export default function ConsentStep() {
   const print = (path) => api.openPrintable(path).catch(setError)
 
   async function revoke(signature) {
-    if (!window.confirm('Revogar a autorização de uso de imagem? O material deixa de poder ser divulgado.')) return
     try {
       await api.consent.revoke(signature.id)
       await load()
@@ -138,7 +139,7 @@ export default function ConsentStep() {
 
   const procedureTerms = terms.filter((t) => t.kind !== 'uso_imagem')
   const imageTerms = terms.filter((t) => t.kind === 'uso_imagem')
-  const rowProps = { signatures, onSign: setSigning, onRevoke: revoke }
+  const rowProps = { signatures, onSign: setSigning, onRevoke: setRevoking }
 
   return (
     <div className="consent">
@@ -254,6 +255,16 @@ export default function ConsentStep() {
             load()
             toast('Assinatura registrada')
           }}
+        />
+      )}
+      {revoking && (
+        <ConfirmModal
+          title="Revogar autorização"
+          message="Revogar a autorização de uso de imagem? O material deixa de poder ser divulgado."
+          confirmLabel="Revogar"
+          danger
+          onConfirm={() => revoke(revoking)}
+          onClose={() => setRevoking(null)}
         />
       )}
       {toastNode}
