@@ -1,4 +1,4 @@
-import { Camera, CheckCheck, ChevronLeft, Crosshair, Minus, Plus, Save, ScanFace, Sparkles, Trash2, Upload } from 'lucide-react'
+import { Camera, CheckCheck, ChevronLeft, Crosshair, Eye, EyeOff, Minus, Plus, Save, ScanFace, Sparkles, Trash2, Upload } from 'lucide-react'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useOutletContext } from 'react-router-dom'
 import { api } from '../api/client'
@@ -71,6 +71,7 @@ export default function PlanningStep() {
   const [hoverRegion, setHoverRegion] = useState(null)
   const [selected, setSelected] = useState(null)
   const [adding, setAdding] = useState(false)
+  const [showMarks, setShowMarks] = useState(true) // false = foto limpa, sem pontos nem rótulos
 
   // Simulação: liga sozinha quando algum ponto tem quantidade; o botão só sobrepõe essa escolha.
   const [simChoice, setSimChoice] = useState(null) // null = automático
@@ -265,6 +266,14 @@ export default function PlanningStep() {
     setSelected(null)
   }
 
+  function toggleMarks() {
+    if (showMarks) {
+      setSimChoice(true) // sem os pontos na frente, mostra o resultado simulado
+      setAdding(false)
+    }
+    setShowMarks(!showMarks)
+  }
+
   // ---- foto ----
   function addPhoto(file) {
     if (!file) return
@@ -288,6 +297,7 @@ export default function PlanningStep() {
       const meta = await api.photos.upload(patient.id, file, 'frontal')
       await showPhoto(meta, null)
       closeRegion()
+      setShowMarks(true) // foto nova: pontos recriados ficam visíveis para ajuste
       setCamera(false)
       setDirty(true)
     } catch (err) {
@@ -445,7 +455,13 @@ export default function PlanningStep() {
                     ))}
                   </div>
                 )}
-                <button className={`btn small ${adding ? 'primary' : ''}`} onClick={() => setAdding(!adding)}>
+                <button
+                  className={`btn small ${adding ? 'primary' : ''}`}
+                  onClick={() => {
+                    setShowMarks(true) // o ponto novo precisa aparecer
+                    setAdding(!adding)
+                  }}
+                >
                   <Crosshair size={15} /> {adding ? 'Toque na foto…' : 'Adicionar ponto'}
                 </button>
               </div>
@@ -462,6 +478,7 @@ export default function PlanningStep() {
               adding={adding}
               simUrl={compare ? simUrl : null}
               split={split}
+              showMarks={showMarks}
               onPickRegion={openRegion}
               onHoverRegion={setHoverRegion}
               onSelectPoint={setSelected}
@@ -472,6 +489,9 @@ export default function PlanningStep() {
             <div className="stage-foot">
               <button className={`btn small ${compare ? 'primary' : ''}`} onClick={() => setSimChoice(!compare)} aria-pressed={compare}>
                 <Sparkles size={15} /> Simular resultado
+              </button>
+              <button className={`btn small ${showMarks ? '' : 'primary'}`} onClick={toggleMarks} aria-pressed={!showMarks}>
+                {showMarks ? <EyeOff size={15} /> : <Eye size={15} />} {showMarks ? 'Ocultar pontos' : 'Mostrar pontos'}
               </button>
               {compare && (
                 <label className="split">
