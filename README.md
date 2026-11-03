@@ -15,32 +15,35 @@ Django e FastAPI rodam no **mesmo processo**: `backend/config/asgi.py` monta o D
 
 ## Rodando
 
-### 1. Banco
-
-SQL Server (padrão):
+### Com Docker (recomendado)
 
 ```bash
-cd backend
-cp .env.example .env        # ajuste DB_PASSWORD e DJANGO_SECRET_KEY
-docker compose --env-file .env -f ../docker-compose.yml up -d
+docker compose up --build
 ```
 
-Também é preciso o driver ODBC no Mac: `brew tap microsoft/mssql-release && brew install msodbcsql18` (aceita a EULA da Microsoft). Em Mac Apple Silicon, ative "Use Rosetta" no Docker Desktop.
+Abra http://localhost:5173 e crie sua conta em `/cadastro`. A API fica em http://localhost:8000/docs e o admin Django em http://localhost:8000/admin/.
 
-Sem SQL Server à mão, use SQLite: `DB_ENGINE=sqlite` no `.env`.
+O compose sobe três serviços: SQL Server, backend (espera o banco, cria o banco `hofpro` e aplica as migrations) e frontend. Código de `backend/` e `frontend/` é montado nos containers, então editar recarrega sozinho.
 
-### 2. Backend
+- Primeira subida baixa cerca de 1,5 GB de imagens.
+- Mac Apple Silicon: Docker Desktop > Settings > General > "Use Rosetta for x86_64/amd64 emulation" (a imagem do SQL Server só existe para amd64).
+- Senha do SQL Server (`sa`) e chave do Django têm valores de desenvolvimento. Para trocar, crie um `.env` na raiz com `DB_PASSWORD` e `DJANGO_SECRET_KEY`. A senha fica gravada no volume na primeira subida; para trocar depois use `docker compose down -v`.
+- O build do backend instala o driver ODBC 18 da Microsoft e aceita a licença dele (`ACCEPT_EULA=Y` no `backend/Dockerfile`).
+- Parar: `docker compose down`. Apagar também banco e fotos: `docker compose down -v`.
+
+### Sem Docker
+
+Backend (SQLite, sem precisar de SQL Server):
 
 ```bash
 cd backend
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+printf 'DB_ENGINE=sqlite\n' > .env
 .venv/bin/python manage.py migrate
 .venv/bin/uvicorn config.asgi:application --reload --port 8000
 ```
 
-Testes (SQLite, não precisam de SQL Server): `.venv/bin/python -m pytest`
-
-### 3. Frontend
+Frontend:
 
 ```bash
 cd frontend
@@ -48,7 +51,9 @@ npm install
 npm run dev        # http://localhost:5173 (proxy de /api para :8000)
 ```
 
-Crie sua conta em `/cadastro`.
+Para usar SQL Server sem Docker no backend, instale o driver (`brew tap microsoft/mssql-release && brew install msodbcsql18`), copie `backend/.env.example` para `backend/.env`, rode `manage.py ensure_db` (cria o banco) e depois `migrate`.
+
+Testes (SQLite, não precisam de SQL Server): `cd backend && .venv/bin/python -m pytest`
 
 ## O que existe
 
