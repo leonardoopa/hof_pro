@@ -36,6 +36,7 @@ export default function FaceStage({
   zone,
   selectedId,
   hoverRegion,
+  suggested = [],
   adding,
   simUrl,
   split,
@@ -109,7 +110,7 @@ export default function FaceStage({
               <button
                 key={`${key}-${side}`}
                 type="button"
-                className={`hotspot ${hoverRegion === key ? 'hover' : ''} ${total.areas ? 'filled' : ''}`}
+                className={`hotspot ${hoverRegion === key ? 'hover' : ''} ${total.areas ? 'filled' : ''} ${suggested.includes(key) ? 'suggest' : ''}`}
                 style={{ left: `${c.x * 100}%`, top: `${c.y * 100}%` }}
                 onClick={() => onPickRegion(key, side)}
                 onMouseEnter={() => onHoverRegion(key)}

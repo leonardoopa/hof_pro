@@ -1,0 +1,20 @@
+/* Relatórios e primeiros passos. Usa as variáveis de tokens.css/base.css. */
+.report-card { margin-bottom: 18px; }
+.report-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.report-sub { display: block; color: var(--muted); font-size: 13px; }
+.report-filters { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.report-h3 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 14px 0 4px; }
+.report-empty { color: var(--muted); }
+.report-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.report-table th { text-align: left; color: var(--muted); font-weight: 500; font-size: 12px; padding: 4px 8px; }
+.report-table td { padding: 8px; border-top: 1px solid var(--line); }
+.report-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+.onboarding { display: grid; gap: 12px; justify-items: start; }
+.onboarding h2 { margin: 0; }
+.onboarding p { margin: 0; color: var(--muted); }
+.onboarding-steps { list-style: none; margin: 0; padding: 0; width: 100%; display: grid; gap: 8px; }
+.onboarding-steps li { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); color: var(--text); }
+.onboarding-steps li > span { flex: 1; }
+.onboarding-steps li.done { color: var(--muted); }
+.onboarding-steps li.done svg { color: var(--ok); }

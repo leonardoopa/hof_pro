@@ -477,3 +477,53 @@
 .guide-toggle input {
   accent-color: var(--primary);
 }
+
+/* Painel de simetria (apoio ao profissional) */
+.symmetry-toggle {
+  width: 100%;
+  margin-bottom: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+.symmetry-body {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+.symmetry-score {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+.symmetry-score b {
+  font-size: 1.6em;
+  color: var(--primary-strong);
+}
+.symmetry-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+.symmetry-table th,
+.symmetry-table td {
+  padding: 6px var(--space-2);
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+}
+.symmetry-table th {
+  color: var(--muted);
+  font-weight: var(--weight-medium);
+}
+.symmetry-table tr.flagged td {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.hotspot.suggest {
+  box-shadow: 0 0 0 3px var(--warn), var(--shadow-sm);
+}
+.region-row.suggest {
+  background: var(--warn-soft);
+}
