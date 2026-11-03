@@ -1,6 +1,7 @@
-import { LogOut, Package, Users, Wallet } from 'lucide-react'
+import { LogOut, Moon, Package, Sun, Users, Wallet } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import { useTheme } from '../theme'
 
 export const initials = (name = '') =>
   name
@@ -12,6 +13,7 @@ export const initials = (name = '') =>
 
 export default function AppLayout() {
   const { user, logout } = useAuth()
+  const { theme, toggle } = useTheme()
 
   return (
     <div className="shell">
@@ -29,7 +31,6 @@ export default function AppLayout() {
           <NavLink to="/estoque">
             <Package size={19} />
             <span>Estoque</span>
-            <em className="soon">Em breve</em>
           </NavLink>
           <NavLink to="/financeiro">
             <Wallet size={19} />
@@ -44,6 +45,14 @@ export default function AppLayout() {
             <strong>{user.full_name}</strong>
             <span>{user.professional_title || user.email}</span>
           </div>
+          <button
+            className="icon-btn theme-toggle"
+            onClick={toggle}
+            aria-label={theme === 'dark' ? 'Usar tema claro' : 'Usar tema escuro'}
+            title={theme === 'dark' ? 'Tema claro' : 'Tema escuro'}
+          >
+            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
           <button className="icon-btn" onClick={logout} aria-label="Sair" title="Sair">
             <LogOut size={16} />
           </button>

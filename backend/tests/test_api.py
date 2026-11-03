@@ -105,13 +105,14 @@ def test_plan_totals_units_and_validation(client, auth, other_auth, patient):
             {"region": "testa", "treatment": "botox", "x": 0.6, "y": 0.2, "amount": 6},
             {"region": "malar", "treatment": "preenchimento", "x": 0.3, "y": 0.5, "amount": 0.5},
             {"region": "mento", "treatment": "preenchimento", "x": 0.5, "y": 0.8, "amount": 1},
+            {"region": "boca", "treatment": "preenchimento", "x": 0.5, "y": 0.7, "amount": 0.5},
             {"region": "temporas", "treatment": "bioestimulador", "x": 0.2, "y": 0.3, "amount": 0},
         ],
     }
     created = client.post(f"/api/patients/{pid}/plans", json=plan_body, headers=auth)
     assert created.status_code == 201, created.text
     plan = created.json()
-    assert plan["totals"] == {"total_ml": 1.5, "total_units": 10.0, "areas": 3}
+    assert plan["totals"] == {"total_ml": 2.0, "total_units": 10.0, "areas": 4}
     assert {p["unit"] for p in plan["points"] if p["treatment"] == "botox"} == {"U"}
 
     # PUT substitui os pontos

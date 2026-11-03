@@ -46,6 +46,7 @@ class Region(models.TextChoices):
     NASOLABIAL = "nasolabial", "Nasolabial"
     JAW = "mandibula", "Mandíbula"
     CHIN = "mento", "Mento"
+    LIPS = "boca", "Boca"
 
 
 class Treatment(models.TextChoices):
@@ -66,12 +67,31 @@ UNIT_BY_TREATMENT = {
 }
 
 
+class Technique(models.TextChoices):
+    BOLUS = "bolus", "Bolus"
+    RETROINJECTION = "retroinjecao", "Retroinjeção"
+    FAN = "leque", "Leque"
+    CANNULA = "canula", "Cânula"
+    MICRODROPLETS = "microgotas", "Microgotas"
+    PAPULE = "papula", "Pápula"
+    OTHER = "outra", "Outra"
+
+
+class Depth(models.TextChoices):
+    INTRADERMAL = "intradermico", "Intradérmico"
+    SUBDERMAL = "subdermico", "Subdérmico"
+    SUBCUTANEOUS = "subcutaneo", "Subcutâneo"
+    SUPRAPERIOSTEAL = "supraperiosteal", "Supraperiosteal"
+    INTRAMUSCULAR = "intramuscular", "Intramuscular"
+
+
 class FacialPlan(models.Model):
     patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name="plans")
     photo = models.ForeignKey(PatientPhoto, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="+")
     title = models.CharField(max_length=120, blank=True)
     notes = models.TextField(blank=True)
+    applied_at = models.DateTimeField(null=True, blank=True)  # preenchido ao marcar como aplicado (dá baixa no estoque)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -103,3 +123,6 @@ class PlanPoint(models.Model):
     y = models.FloatField()
     amount = models.DecimalField(max_digits=6, decimal_places=2, default=0)
     unit = models.CharField(max_length=2, default="ml")
+    technique = models.CharField(max_length=20, choices=Technique.choices, blank=True, default="")
+    depth = models.CharField(max_length=20, choices=Depth.choices, blank=True, default="")
+    lot = models.ForeignKey("inventory.Lot", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")

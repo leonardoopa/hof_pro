@@ -5,8 +5,8 @@ import { assignSides } from './regions'
 // Índices são do Face Mesh do MediaPipe (468 pontos).
 
 const SIDES = {
-  D: { sign: +1, browOuter: 70, browMid: 105, eyeOuter: 33, eyeInner: 133, lowerLid: 145, faceEye: 127, faceTop: 21, ala: 129, mouth: 61, jawAngle: 58, jawBody: 172 },
-  E: { sign: -1, browOuter: 300, browMid: 334, eyeOuter: 263, eyeInner: 362, lowerLid: 374, faceEye: 356, faceTop: 251, ala: 358, mouth: 291, jawAngle: 288, jawBody: 397 },
+  D: { sign: +1, browOuter: 70, browMid: 105, eyeOuter: 33, eyeInner: 133, lowerLid: 145, faceEye: 127, faceTop: 21, ala: 129, mouth: 61, jawAngle: 58, jawBody: 172, bow: 37 },
+  E: { sign: -1, browOuter: 300, browMid: 334, eyeOuter: 263, eyeInner: 362, lowerLid: 374, faceEye: 356, faceTop: 251, ala: 358, mouth: 291, jawAngle: 288, jawBody: 397, bow: 267 },
 }
 // sign: direção "para dentro do rosto" no eixo x (+1 em D, -1 em E).
 
@@ -51,7 +51,17 @@ export function buildTemplate(landmarks, width, height) {
     add('mandibula', { x: angle.x, y: angle.y - 0.02 * faceH }, side)
     const body = inward(P(s.jawBody), 0.03)
     add('mandibula', { x: body.x, y: body.y - 0.01 * faceH }, side)
+
+    // Boca (pontos centrais, sem lado): arco do cupido, comissura e linhas periorais ("código de barras").
+    add('boca', P(s.bow))
+    add('boca', P(s.mouth))
+    const lipTop = P(0)
+    add('boca', { x: lipTop.x + (P(s.mouth).x - lipTop.x) * 0.6, y: P(164).y + (lipTop.y - P(164).y) * 0.45 })
   }
+
+  // Boca: centro do lábio superior e do inferior (contorno do vermelhão).
+  add('boca', mix(P(0), P(13), 0.45))
+  add('boca', mix(P(17), P(14), 0.45))
 
   add('mento', mix(P(17), P(152), 0.62))
   return out
@@ -72,6 +82,7 @@ function fallbackPoints() {
     ...at('nasolabial', [[0.43, 0.61], [0.57, 0.61]]),
     ...at('mandibula', [[0.33, 0.69], [0.67, 0.69], [0.38, 0.76], [0.62, 0.76]]),
     ...at('mento', [[0.5, 0.82]]),
+    ...at('boca', [[0.5, 0.68], [0.5, 0.725], [0.465, 0.667], [0.535, 0.667], [0.42, 0.7], [0.58, 0.7], [0.43, 0.655], [0.57, 0.655]]),
   ]
 }
 

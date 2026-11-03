@@ -1,13 +1,18 @@
 // Pré-visualização ilustrativa feita no navegador. Não é um modelo clínico nem generativo:
 //  - toxina (U): suaviza a pele ao redor do ponto (efeito de relaxamento das linhas);
-//  - produtos em ml: abaulamento local (efeito de volume), limitado para não distorcer o rosto.
+//  - produtos em ml: abaulamento local (efeito de volume), limitado para não distorcer o rosto;
+//  - boca: preenchimento/bioestimulador aumenta o volume do lábio (elipse horizontal, leve realce de cor);
+//    toxina/skinbooster suaviza as linhas periorais ("código de barras").
 // A intensidade cresce com a quantidade planejada.
 import { treatmentOf } from './regions'
 
 const MAX_SIDE = 1200
 
 // Quanto cada produto "empurra" a pele para fora (fração máxima do deslocamento).
-const VOLUME_GAIN = { preenchimento: 1, bioestimulador: 0.55, skinbooster: 0.15, outro: 0.8 }
+const VOLUME_GAIN = { preenchimento: 1, bioestimulador: 0.6, skinbooster: 0.3, outro: 0.8 }
+
+// Suavização: toxina em qualquer região; skinbooster só na boca (linhas periorais).
+const isSmoothing = (p) => treatmentOf(p.treatment).unit === 'U' || (p.region === 'boca' && p.treatment === 'skinbooster')
 
 function boxBlur(src, w, h, radius, passes = 2) {
   let a = Float32Array.from(src)
@@ -72,15 +77,15 @@ export function renderSimulation(image, points) {
   const img = ctx.getImageData(0, 0, w, h)
   let data = img.data
 
-  // 1) suavização (toxina)
-  const toxin = active.filter((p) => treatmentOf(p.treatment).unit === 'U')
+  // 1) suavização (toxina; skinbooster na boca)
+  const toxin = active.filter(isSmoothing)
   if (toxin.length) {
-    const blurred = boxBlur(data, w, h, Math.max(2, Math.round(w * 0.006)))
+    const blurred = boxBlur(data, w, h, Math.max(3, Math.round(w * 0.01)), 3)
     for (const p of toxin) {
       const cx = p.x * w
       const cy = p.y * h
-      const r = w * (0.05 + 0.018 * Math.sqrt(p.amount))
-      const strength = Math.min(0.8, 0.25 + 0.06 * p.amount)
+      const r = w * (0.06 + 0.02 * Math.sqrt(p.amount)) * (p.region === 'boca' ? 0.8 : 1)
+      const strength = treatmentOf(p.treatment).unit === 'U' ? Math.min(0.92, 0.45 + 0.07 * p.amount) : Math.min(0.9, 0.5 + 0.4 * p.amount)
       for (let y = Math.max(0, Math.floor(cy - r)); y < Math.min(h, Math.ceil(cy + r)); y++) {
         for (let x = Math.max(0, Math.floor(cx - r)); x < Math.min(w, Math.ceil(cx + r)); x++) {
           const d = Math.hypot(x - cx, y - cy) / r
@@ -95,21 +100,25 @@ export function renderSimulation(image, points) {
 
   // 2) volume (preenchimento, bioestimulador, skinbooster, outro)
   const out = [0, 0, 0]
-  for (const p of active.filter((q) => treatmentOf(q.treatment).unit !== 'U')) {
+  for (const p of active.filter((q) => !isSmoothing(q))) {
+    const lips = p.region === 'boca'
     const cx = p.x * w
     const cy = p.y * h
-    const r = w * (0.035 + 0.03 * Math.sqrt(p.amount))
-    const gain = Math.min(0.22, 0.1 * Math.sqrt(p.amount)) * (VOLUME_GAIN[p.treatment] ?? 1)
+    const r = w * (lips ? 0.03 + 0.022 * Math.sqrt(p.amount) : 0.045 + 0.035 * Math.sqrt(p.amount))
+    const rx = lips ? r * 1.35 : r // lábio: elipse mais larga que alta
+    const ry = lips ? r * 0.85 : r
+    const gain = Math.min(lips ? 0.5 : 0.4, 0.17 * Math.sqrt(p.amount) + 0.06) * (VOLUME_GAIN[p.treatment] ?? 1)
     const before = new Uint8ClampedArray(data)
-    for (let y = Math.max(0, Math.floor(cy - r)); y < Math.min(h, Math.ceil(cy + r)); y++) {
-      for (let x = Math.max(0, Math.floor(cx - r)); x < Math.min(w, Math.ceil(cx + r)); x++) {
-        const t = Math.hypot(x - cx, y - cy) / r
+    for (let y = Math.max(0, Math.floor(cy - ry)); y < Math.min(h, Math.ceil(cy + ry)); y++) {
+      for (let x = Math.max(0, Math.floor(cx - rx)); x < Math.min(w, Math.ceil(cx + rx)); x++) {
+        const t = Math.hypot((x - cx) / rx, (y - cy) / ry)
         if (t >= 1) continue
         const pull = 1 - gain * (1 - t * t) ** 2
         sample(before, w, h, cx + (x - cx) * pull, cy + (y - cy) * pull, out)
         const i = (y * w + x) * 4
-        const light = 1 + 0.05 * gain * (1 - t) // realce sutil no topo do volume
-        data[i] = Math.min(255, out[0] * light)
+        const light = 1 + 0.12 * gain * (1 - t) // realce no topo do volume
+        const warm = lips ? 1 + 0.25 * gain * (1 - t) : 1 // lábio ganha um pouco de cor
+        data[i] = Math.min(255, out[0] * light * warm)
         data[i + 1] = Math.min(255, out[1] * light)
         data[i + 2] = Math.min(255, out[2] * light)
       }

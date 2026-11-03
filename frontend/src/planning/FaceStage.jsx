@@ -81,7 +81,7 @@ export default function FaceStage({
             src={simUrl}
             alt="Simulação do resultado"
             draggable={false}
-            style={{ clipPath: `inset(0 0 0 ${split}%)` }}
+            style={{ clipPath: `inset(0 0 0 ${100 - split}%)` }}
           />
         )}
 

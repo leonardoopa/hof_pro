@@ -6,6 +6,7 @@ export const REGIONS = [
   { key: 'nasolabial', label: 'Nasolabial' },
   { key: 'mandibula', label: 'Mandíbula' },
   { key: 'mento', label: 'Mento' },
+  { key: 'boca', label: 'Boca (lábios)' },
 ]
 
 // unit: toxina em unidades (U), demais produtos em ml. initial = dose ao ativar um ponto vazio.

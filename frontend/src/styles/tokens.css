@@ -1,0 +1,145 @@
+/* Design system lavanda: tokens de cor, espaçamento, raio, sombra, tipografia e movimento.
+   Tema claro por padrão; escuro via prefers-color-scheme ou data-theme="dark" (toggle persistido).
+   Contrastes de texto conferidos para WCAG AA (>= 4.5:1). */
+
+:root {
+  color-scheme: light;
+
+  /* cor */
+  --bg: #f4f2f7;
+  --surface: #ffffff;
+  --surface-soft: #fbfafc;
+  --line: #e8e4ee;
+  --line-strong: #d5cce1;
+  --text: #2b2831;
+  --muted: #6a6475;
+  --primary: #7a63a0;
+  --primary-strong: #6c5590;
+  --primary-soft: #eee8f5;
+  --on-primary: #ffffff;
+  --ok: #44703d;
+  --ok-soft: #e4eedf;
+  --warn: #8a5f0f;
+  --warn-soft: #f8ebcf;
+  --danger: #a63f3a;
+  --danger-soft: #f6e0de;
+  --overlay: rgba(43, 40, 49, 0.4);
+  --toast-bg: #2b2831;
+  --toast-text: #ffffff;
+  --auth-glow: #e9e0f4;
+  --stage-bg: #e9e5ee;
+  --focus: #6c5590;
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--primary) 28%, transparent);
+
+  /* espaçamento */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* raio */
+  --radius-xs: 10px;
+  --radius-sm: 12px;
+  --radius: 18px;
+  --radius-pill: 999px;
+
+  /* sombra */
+  --shadow-sm: 0 1px 4px rgba(43, 40, 49, 0.12);
+  --shadow: 0 1px 2px rgba(43, 40, 49, 0.04), 0 10px 28px rgba(90, 70, 120, 0.07);
+  --shadow-lg: 0 24px 60px rgba(43, 40, 49, 0.25);
+
+  /* tipografia */
+  --font: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --logo-font: 'Jost', 'Inter', sans-serif;
+  --text-2xs: 10px;
+  --text-label: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-md: 14px;
+  --text-base: 15px;
+  --text-lg: 16px;
+  --text-xl: 17px;
+  --text-2xl: 18px;
+  --text-3xl: 20px;
+  --text-4xl: 24px;
+  --text-5xl: 26px;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --leading: 1.45;
+
+  /* movimento */
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --dur-fast: 0.12s;
+  --dur: 0.18s;
+  --dur-slow: 0.25s;
+}
+
+/* Escuro: [data-theme='dark'] (escolha do usuário) e prefers-color-scheme (automático, se o usuário
+   não escolheu o claro). Os dois blocos precisam ter o mesmo conteúdo: sem pré-processador, o CSS
+   não compartilha declarações entre media query e atributo. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #17141c;
+  --surface: #1f1b27;
+  --surface-soft: #262131;
+  --line: #342e41;
+  --line-strong: #4a4259;
+  --text: #ece8f2;
+  --muted: #a9a2b6;
+  --primary: #b7a3e0;
+  --primary-strong: #cdbdf0;
+  --primary-soft: #2c2540;
+  --on-primary: #1a1424;
+  --ok: #8fc084;
+  --ok-soft: #233222;
+  --warn: #e0b45a;
+  --warn-soft: #3a2f17;
+  --danger: #f08d87;
+  --danger-soft: #3d2224;
+  --overlay: rgba(8, 6, 12, 0.6);
+  --toast-bg: #ece8f2;
+  --toast-text: #1a1424;
+  --auth-glow: #2c2540;
+  --stage-bg: #2a2535;
+  --focus: #cdbdf0;
+  --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.5);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 28px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --bg: #17141c;
+    --surface: #1f1b27;
+    --surface-soft: #262131;
+    --line: #342e41;
+    --line-strong: #4a4259;
+    --text: #ece8f2;
+    --muted: #a9a2b6;
+    --primary: #b7a3e0;
+    --primary-strong: #cdbdf0;
+    --primary-soft: #2c2540;
+    --on-primary: #1a1424;
+    --ok: #8fc084;
+    --ok-soft: #233222;
+    --warn: #e0b45a;
+    --warn-soft: #3a2f17;
+    --danger: #f08d87;
+    --danger-soft: #3d2224;
+    --overlay: rgba(8, 6, 12, 0.6);
+    --toast-bg: #ece8f2;
+    --toast-text: #1a1424;
+    --auth-glow: #2c2540;
+    --stage-bg: #2a2535;
+    --focus: #cdbdf0;
+    --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.5);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 28px rgba(0, 0, 0, 0.35);
+    --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.6);
+  }
+}
