@@ -47,6 +47,7 @@ class LotPatch(BaseModel):
     number: str | None = Field(default=None, min_length=1, max_length=40)
     expires_on: date | None = None
     balance: Decimal | None = Field(default=None, ge=0, le=100000, max_digits=8, decimal_places=2)
+    reason: str | None = Field(default=None, max_length=200)  # obrigatório ao alterar o saldo
 
 
 class LotOut(BaseModel):
@@ -60,6 +61,16 @@ class LotOut(BaseModel):
     balance: Qty
     expired: bool
     days_to_expire: int
+
+
+class MovementOut(BaseModel):
+    id: int
+    kind: str
+    delta: Qty
+    balance_after: Qty
+    author: str
+    reason: str
+    created_at: datetime
 
 
 class AlertsOut(BaseModel):
