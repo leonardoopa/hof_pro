@@ -100,6 +100,12 @@ export const api = {
     },
   },
 
+  guidance: {
+    list: (treatment = '') => data(`/guidance${treatment ? `?treatment=${encodeURIComponent(treatment)}` : ''}`),
+    forPatient: (patientId, planId) =>
+      data(`/patients/${patientId}/guidance${planId ? `?plan_id=${planId}` : ''}`),
+  },
+
   anamnesis: {
     questions: () => data('/anamnesis/questions'),
     get: (patientId) => data(`/patients/${patientId}/anamnesis`),
@@ -111,5 +117,41 @@ export const api = {
     get: (id) => data(`/plans/${id}`),
     create: (patientId, body) => data(`/patients/${patientId}/plans`, { method: 'POST', json: body }),
     update: (id, body) => data(`/plans/${id}`, { method: 'PUT', json: body }),
+    apply: (id) => data(`/plans/${id}/apply`, { method: 'POST' }),
+  },
+
+  inventory: {
+    products: () => data('/inventory/products'),
+    createProduct: (body) => data('/inventory/products', { method: 'POST', json: body }),
+    updateProduct: (id, body) => data(`/inventory/products/${id}`, { method: 'PATCH', json: body }),
+    removeProduct: (id) => request(`/inventory/products/${id}`, { method: 'DELETE' }),
+    lots: ({ available = false } = {}) => data(`/inventory/lots?available=${available}`),
+    createLot: (body) => data('/inventory/lots', { method: 'POST', json: body }),
+    updateLot: (id, body) => data(`/inventory/lots/${id}`, { method: 'PATCH', json: body }),
+    removeLot: (id) => request(`/inventory/lots/${id}`, { method: 'DELETE' }),
+    alerts: () => data('/inventory/alerts'),
+    traceability: (patientId) => data(`/patients/${patientId}/traceability`),
+  },
+
+  consent: {
+    terms: () => data('/consent/terms'),
+    list: (patientId) => data(`/patients/${patientId}/consents`),
+    sign: (patientId, body) => data(`/patients/${patientId}/consents`, { method: 'POST', json: body }),
+    revoke: (id) => data(`/consents/${id}/revoke`, { method: 'POST' }),
+  },
+
+  // Páginas imprimíveis exigem token: baixa o HTML com Authorization e abre numa aba (blob), sem rota pública.
+  async openPrintable(path) {
+    const win = window.open('', '_blank') // abre antes do await para não ser bloqueado como popup
+    try {
+      const res = await request(path)
+      const url = URL.createObjectURL(await res.blob())
+      if (win) win.location.href = url
+      else window.location.href = url
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (err) {
+      win?.close()
+      throw err
+    }
   },
 }

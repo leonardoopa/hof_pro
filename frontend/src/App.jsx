@@ -3,7 +3,11 @@ import { useAuth } from './auth/AuthContext'
 import AppLayout from './components/AppLayout'
 import AnamnesisStep from './pages/AnamnesisStep'
 import AuthPage from './pages/AuthPage'
+import ConsentStep from './pages/ConsentStep'
+import InventoryPage from './pages/InventoryPage'
 import ComingSoon from './pages/ComingSoon'
+import EvolutionPage from './evolution/EvolutionPage'
+import GuidancePage from './guidance/GuidancePage'
 import PatientsPage from './pages/PatientsPage'
 import PatientWorkspace from './pages/PatientWorkspace'
 import PlanningStep from './pages/PlanningStep'
@@ -32,19 +36,11 @@ export default function App() {
           <Route index element={<Navigate to="anamnese" replace />} />
           <Route path="anamnese" element={<AnamnesisStep />} />
           <Route path="planejamento" element={<PlanningStep />} />
-          <Route
-            path="prontuario"
-            element={<ComingSoon title="Prontuário e termos" text="Termos de consentimento e assinatura digital do paciente, depois do planejamento." />}
-          />
-          <Route
-            path="resumo"
-            element={<ComingSoon title="Resumo e orientações" text="Resumo do plano e orientações pós-procedimento para o paciente." />}
-          />
+          <Route path="evolucao" element={<EvolutionPage />} />
+          <Route path="prontuario" element={<ConsentStep />} />
+          <Route path="resumo" element={<GuidancePage />} />
         </Route>
-        <Route
-          path="/estoque"
-          element={<ComingSoon title="Estoque" text="Controle de produtos com marca, lote e validade, com alerta de vencimento." />}
-        />
+        <Route path="/estoque" element={<InventoryPage />} />
         <Route
           path="/financeiro"
           element={<ComingSoon title="Financeiro" text="Orçamentos e recebimentos ligados ao plano de cada paciente." />}
