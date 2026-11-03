@@ -1,5 +1,5 @@
-import { AlertTriangle, Package, Plus, Trash2 } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { AlertTriangle, History, Package, Plus, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { Fragment, useCallback, useEffect, useState } from 'react'
 import { api } from '../api/client'
 import ErrorList from '../components/ErrorList'
 import Modal from '../components/Modal'
@@ -146,6 +146,33 @@ function LotModal({ products, onClose, onSaved }) {
   )
 }
 
+const MOVE_LABEL = { entrada: 'Entrada', ajuste: 'Ajuste', baixa: 'Baixa' }
+
+function MovementsRow({ lotId }) {
+  const [rows, setRows] = useState(null)
+  const [error, setError] = useState(null)
+  useEffect(() => {
+    api.inventory.movements(lotId).then(setRows).catch(setError)
+  }, [lotId])
+  return (
+    <tr>
+      <td colSpan={6}>
+        <ErrorList error={error} />
+        {!rows && !error && <span className="inv-meta">Carregando…</span>}
+        {rows && !rows.length && <span className="inv-meta">Sem movimentações.</span>}
+        {rows?.map((m) => (
+          <span key={m.id} className="inv-meta">
+            {new Date(m.created_at).toLocaleString('pt-BR')} · {MOVE_LABEL[m.kind] ?? m.kind} {m.delta > 0 ? '+' : ''}
+            {m.delta} → saldo {m.balance_after}
+            {m.author && ` · ${m.author}`}
+            {m.reason && ` · ${m.reason}`}
+          </span>
+        ))}
+      </td>
+    </tr>
+  )
+}
+
 function lotStatus(lot) {
   if (lot.expired) return { cls: 'expired', text: 'Vencido' }
   if (lot.days_to_expire <= 30) return { cls: 'soon', text: `Vence em ${lot.days_to_expire} d` }
@@ -158,6 +185,7 @@ export default function InventoryPage() {
   const [alerts, setAlerts] = useState({ expired: [], expiring: [] })
   const [error, setError] = useState(null)
   const [modal, setModal] = useState(null) // 'product' | 'lot'
+  const [openHistory, setOpenHistory] = useState(null) // id do lote com histórico aberto
 
   const load = useCallback(async () => {
     try {
@@ -182,6 +210,16 @@ export default function InventoryPage() {
     } catch (err) {
       setError(err)
     }
+  }
+
+  function adjust(lot) {
+    const value = window.prompt(`Novo saldo do lote ${lot.number} (${lot.unit}):`, lot.balance)
+    if (value === null) return
+    const balance = Number(value.replace(',', '.'))
+    if (!Number.isFinite(balance) || balance < 0) return setError(new Error('Saldo inválido.'))
+    const reason = window.prompt('Motivo do ajuste (obrigatório):')
+    if (!reason?.trim()) return setError(new Error('Informe o motivo do ajuste.'))
+    run(() => api.inventory.updateLot(lot.id, { balance, reason: reason.trim() }))
   }
 
   const done = () => {
@@ -279,7 +317,8 @@ export default function InventoryPage() {
                     {productLots.map((lot) => {
                       const st = lotStatus(lot)
                       return (
-                        <tr key={lot.id}>
+                        <Fragment key={lot.id}>
+                        <tr>
                           <td>{lot.number}</td>
                           <td>{fmtDate(lot.expires_on)}</td>
                           <td>
@@ -296,6 +335,16 @@ export default function InventoryPage() {
                           <td className="inv-actions">
                             <button
                               className="icon-btn"
+                              aria-label={`Histórico do lote ${lot.number}`}
+                              onClick={() => setOpenHistory(openHistory === lot.id ? null : lot.id)}
+                            >
+                              <History size={14} />
+                            </button>
+                            <button className="icon-btn" aria-label={`Ajustar saldo do lote ${lot.number}`} onClick={() => adjust(lot)}>
+                              <SlidersHorizontal size={14} />
+                            </button>
+                            <button
+                              className="icon-btn"
                               aria-label={`Excluir lote ${lot.number}`}
                               onClick={() => window.confirm('Excluir este lote?') && run(() => api.inventory.removeLot(lot.id))}
                             >
@@ -303,6 +352,8 @@ export default function InventoryPage() {
                             </button>
                           </td>
                         </tr>
+                        {openHistory === lot.id && <MovementsRow lotId={lot.id} />}
+                        </Fragment>
                       )
                     })}
                   </tbody>

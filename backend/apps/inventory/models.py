@@ -59,7 +59,7 @@ class Application(models.Model):
     """Baixa de estoque: uma linha por ponto aplicado. Guarda cópia dos dados clínicos
     para a rastreabilidade sobreviver à edição/remoção do plano."""
 
-    patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name="applications")
+    patient = models.ForeignKey(Patient, on_delete=models.PROTECT, related_name="applications")  # paciente com aplicações só sai por anonimização
     plan = models.ForeignKey(FacialPlan, on_delete=models.SET_NULL, null=True, blank=True, related_name="applications")
     point = models.ForeignKey(PlanPoint, on_delete=models.SET_NULL, null=True, blank=True, related_name="applications")
     lot = models.ForeignKey(Lot, on_delete=models.PROTECT, related_name="applications")
@@ -74,3 +74,23 @@ class Application(models.Model):
 
     class Meta:
         ordering = ["-applied_at", "-id"]
+
+
+class LotMovement(models.Model):
+    """Histórico de movimentação do saldo de um lote (entrada, ajuste manual, baixa por aplicação)."""
+
+    class Kind(models.TextChoices):
+        ENTRY = "entrada", "Entrada"
+        ADJUSTMENT = "ajuste", "Ajuste"
+        WRITE_OFF = "baixa", "Baixa"
+
+    lot = models.ForeignKey(Lot, on_delete=models.CASCADE, related_name="movements")
+    kind = models.CharField(max_length=10, choices=Kind.choices)
+    delta = models.DecimalField(max_digits=9, decimal_places=2)  # negativo na baixa/ajuste para menos
+    balance_after = models.DecimalField("saldo após", max_digits=8, decimal_places=2)
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    reason = models.CharField("motivo", max_length=200, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]

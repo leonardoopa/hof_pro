@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse
 
 from apps.accounts.models import User
 from apps.clinical.models import FacialPlan, UNIT_BY_TREATMENT, Depth, Region, Technique, Treatment
-from apps.inventory.models import Application, Lot, Product
+from apps.inventory.models import Application, Lot, LotMovement, Product
 
 from ..deps import current_user, get_patient_or_404
 from ..orm import orm
@@ -20,6 +20,7 @@ from ..schemas_inventory import (
     LotIn,
     LotOut,
     LotPatch,
+    MovementOut,
     ProductIn,
     ProductOut,
     ProductPatch,
@@ -151,6 +152,9 @@ def create_lot(data: LotIn, user: User = Depends(current_user)):
         initial_quantity=data.quantity,
         balance=data.quantity,
     )
+    LotMovement.objects.create(
+        lot=lot, kind=LotMovement.Kind.ENTRY, delta=data.quantity, balance_after=lot.balance, author=user, reason="Entrada do lote"
+    )
     return _lot_out(lot, timezone.localdate())
 
 
@@ -163,10 +167,35 @@ def update_lot(lot_id: int, data: LotPatch, user: User = Depends(current_user)):
         changes["number"] = changes["number"].strip()
         if Lot.objects.filter(product=lot.product, number__iexact=changes["number"]).exclude(pk=lot.pk).exists():
             raise HTTPException(status.HTTP_409_CONFLICT, "Já existe um lote com esse número para este produto.")
-    for field, value in changes.items():
-        setattr(lot, field, value)  # "balance" = correção manual de inventário
-    lot.save()
+    reason = (changes.pop("reason", "") or "").strip()
+    old_balance = lot.balance
+    new_balance = changes.get("balance")
+    adjusting = new_balance is not None and new_balance != old_balance
+    if adjusting and not reason:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Informe o motivo (reason) ao alterar o saldo do lote.")
+    with transaction.atomic():
+        for field, value in changes.items():
+            setattr(lot, field, value)  # "balance" = correção manual de inventário
+        lot.save()
+        if adjusting:
+            LotMovement.objects.create(
+                lot=lot, kind=LotMovement.Kind.ADJUSTMENT, delta=new_balance - old_balance,
+                balance_after=new_balance, author=user, reason=reason,
+            )
     return _lot_out(lot, timezone.localdate())
+
+
+@router.get("/inventory/lots/{lot_id}/movements", response_model=list[MovementOut])
+@orm
+def lot_movements(lot_id: int, user: User = Depends(current_user)):
+    lot = _own_lot(user, lot_id)
+    return [
+        MovementOut(
+            id=m.id, kind=m.kind, delta=m.delta, balance_after=m.balance_after,
+            author=m.author.full_name if m.author else "", reason=m.reason, created_at=m.created_at,
+        )
+        for m in lot.movements.select_related("author")
+    ]
 
 
 @router.delete("/inventory/lots/{lot_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -225,6 +254,11 @@ def apply_plan(plan_id: int, user: User = Depends(current_user)):
                 raise HTTPException(
                     status.HTTP_409_CONFLICT, f"Saldo insuficiente no lote {lot.number} de {lot.product.name}."
                 )
+            lot.refresh_from_db(fields=["balance"])
+            LotMovement.objects.create(
+                lot=lot, kind=LotMovement.Kind.WRITE_OFF, delta=-p.amount, balance_after=lot.balance, author=user,
+                reason=f"Aplicação do plano #{plan.id}",
+            )
             Application.objects.create(
                 patient=plan.patient, plan=plan, point=p, lot=lot, applied_by=user, amount=p.amount, unit=p.unit,
                 region=p.region, treatment=p.treatment, technique=p.technique, depth=p.depth,

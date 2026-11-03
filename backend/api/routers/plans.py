@@ -116,4 +116,9 @@ def update_plan(plan_id: int, data: PlanIn, user: User = Depends(current_user)):
 @router.delete("/plans/{plan_id}", status_code=status.HTTP_204_NO_CONTENT)
 @orm
 def delete_plan(plan_id: int, user: User = Depends(current_user)):
-    _own_plan(user, plan_id).delete()
+    plan = _own_plan(user, plan_id)
+    if plan.applied_at:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Plano já aplicado não pode ser excluído: o estoque já recebeu baixa e a rastreabilidade depende dele."
+        )
+    plan.delete()
