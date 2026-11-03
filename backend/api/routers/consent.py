@@ -10,9 +10,11 @@ from fastapi.responses import HTMLResponse
 from PIL import Image
 
 from apps.accounts.models import User
+from apps.audit.models import AccessLog
 from apps.consent.models import Signature, Term, compute_hash
 from apps.patients.models import Patient
 
+from ..audit import log_access
 from ..deps import current_user, get_patient_or_404
 from ..orm import orm
 from ..printing import esc, page
@@ -113,15 +115,17 @@ def revoke(signature_id: int, user: User = Depends(current_user)):
 
 @router.get("/consents/{signature_id}/signature")
 @orm
-def signature_image(signature_id: int, user: User = Depends(current_user)):
+def signature_image(signature_id: int, request: Request, user: User = Depends(current_user)):
     sig = _own_signature(user, signature_id)
+    log_access(user, AccessLog.Action.VIEW, "assinatura", sig.id, request)
     return Response(bytes(sig.image), media_type="image/png", headers={"Cache-Control": "private, no-store"})
 
 
 @router.get("/consents/{signature_id}/document", response_class=HTMLResponse)
 @orm
-def document(signature_id: int, user: User = Depends(current_user)):
+def document(signature_id: int, request: Request, user: User = Depends(current_user)):
     sig = _own_signature(user, signature_id)
+    log_access(user, AccessLog.Action.VIEW, "prontuario", sig.id, request)
     expected = compute_hash(
         term_kind=sig.term.kind, term_version=sig.term.version, term_content=sig.term_content,
         patient_id=sig.patient_id, signer_name=sig.signer_name, signed_at=sig.signed_at, image=sig.image,

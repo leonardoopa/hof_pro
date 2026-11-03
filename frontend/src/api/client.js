@@ -83,6 +83,7 @@ export const api = {
     create: (body) => data('/patients', { method: 'POST', json: body }),
     update: (id, body) => data(`/patients/${id}`, { method: 'PATCH', json: body }),
     remove: (id) => request(`/patients/${id}`, { method: 'DELETE' }),
+    anonymize: (id) => data(`/patients/${id}/anonymize`, { method: 'POST' }),
   },
 
   photos: {
@@ -132,6 +133,13 @@ export const api = {
     alerts: () => data('/inventory/alerts'),
     traceability: (patientId) => data(`/patients/${patientId}/traceability`),
   },
+
+  reports: {
+    usage: (from, to) => data(`/reports/usage?from=${from}&to=${to}`),
+    returns: (days) => data(`/reports/returns?days=${days}`),
+  },
+
+  demo: { load: () => data('/demo', { method: 'POST' }) },
 
   consent: {
     terms: () => data('/consent/terms'),

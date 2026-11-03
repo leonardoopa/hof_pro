@@ -1,0 +1,15 @@
+# Contexto do build do backend é a raiz (para usar o requirements.txt único).
+# O frontend tem contexto próprio (frontend/.dockerignore).
+.git
+.claude
+graphify-out
+frontend
+.env
+**/.env
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/*.sqlite3
+backend/media
+backend/staticfiles

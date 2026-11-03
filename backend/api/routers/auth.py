@@ -1,10 +1,12 @@
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from apps.accounts.models import User
 
+from .. import ratelimit
+from ..audit import client_ip
 from ..deps import current_user
 from ..orm import orm
 from ..schemas import LoginIn, RegisterIn, TokenOut, UserOut
@@ -40,10 +42,20 @@ def register(data: RegisterIn):
 
 @router.post("/login", response_model=TokenOut)
 @orm
-def login(data: LoginIn):
-    user = authenticate(email=data.email.lower(), password=data.password)
+def login(data: LoginIn, request: Request):
+    email, ip = data.email.lower(), client_ip(request) or ""
+    wait = ratelimit.retry_after(email, ip)
+    if wait:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            f"Muitas tentativas de login. Tente novamente em {-(-wait // 60)} minuto(s).",
+            headers={"Retry-After": str(wait)},
+        )
+    user = authenticate(email=email, password=data.password)
     if user is None:
+        ratelimit.register_failure(email, ip)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "E-mail ou senha incorretos.")
+    ratelimit.reset(email, ip)
     return _token_for(user)
 
 

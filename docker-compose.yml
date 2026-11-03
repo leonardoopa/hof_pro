@@ -3,7 +3,7 @@
 # Em Mac Apple Silicon: Docker Desktop > Settings > General > "Use Rosetta for x86_64/amd64 emulation"
 # (a imagem do SQL Server só existe para amd64).
 #
-# Variáveis opcionais em um arquivo .env nesta pasta: DB_PASSWORD, DJANGO_SECRET_KEY.
+# Configuração: .env nesta pasta (cp .env.example .env). Sem ele, valem os padrões de desenvolvimento abaixo.
 services:
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-latest
@@ -17,16 +17,21 @@ services:
       - sqlserver_data:/var/opt/mssql
 
   backend:
-    build: ./backend
+    build:
+      context: . # raiz: requirements.txt único do projeto
+      dockerfile: backend/Dockerfile
     depends_on:
       - sqlserver
     environment:
       DB_ENGINE: mssql
       DB_HOST: sqlserver
-      DB_NAME: hofpro
+      DB_NAME: ${DB_NAME:-hofpro}
       DB_USER: sa
       DB_PASSWORD: ${DB_PASSWORD:-HofPro!Dev2026}
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-dev-insecure-key-change-me-0123456789abcdef}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-1}
+      JWT_LIFETIME_HOURS: ${JWT_LIFETIME_HOURS:-12}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
       DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,backend
       MEDIA_ROOT: /data/media
     command: >

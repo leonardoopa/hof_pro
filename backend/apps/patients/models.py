@@ -11,6 +11,7 @@ class Patient(models.Model):
     phone = models.CharField("telefone", max_length=30, blank=True)
     email = models.EmailField("e-mail", blank=True)
     notes = models.TextField("observações", blank=True)
+    anonymized_at = models.DateTimeField("anonimizado em", null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

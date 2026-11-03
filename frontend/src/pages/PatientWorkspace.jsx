@@ -1,7 +1,8 @@
-import { ChevronLeft, Trash2 } from 'lucide-react'
+import { ChevronLeft, EyeOff, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api/client'
+import ConfirmModal from '../components/ConfirmModal'
 import ErrorList from '../components/ErrorList'
 import { ageFrom } from './PatientsPage'
 
@@ -18,14 +19,22 @@ export default function PatientWorkspace() {
   const navigate = useNavigate()
   const [patient, setPatient] = useState(null)
   const [error, setError] = useState(null)
+  const [confirm, setConfirm] = useState(null) // 'remove' | 'anonymize'
 
   useEffect(() => {
     setPatient(null)
     api.patients.get(patientId).then(setPatient).catch(setError)
   }, [patientId])
 
+  async function anonymize() {
+    try {
+      setPatient(await api.patients.anonymize(patient.id))
+    } catch (err) {
+      setError(err)
+    }
+  }
+
   async function remove() {
-    if (!window.confirm(`Excluir ${patient.full_name} e todos os dados dele(a)? Isso não pode ser desfeito.`)) return
     try {
       await api.patients.remove(patient.id)
       navigate('/pacientes')
@@ -50,7 +59,12 @@ export default function PatientWorkspace() {
           <span className="meta">{[age != null && `${age} anos`, patient.phone, patient.email].filter(Boolean).join(' · ')}</span>
         </div>
         <span className="spacer" />
-        <button className="btn ghost danger small" onClick={remove}>
+        {!patient.anonymized_at && (
+          <button className="btn ghost small" onClick={() => setConfirm('anonymize')}>
+            <EyeOff size={15} /> Anonimizar
+          </button>
+        )}
+        <button className="btn ghost danger small" onClick={() => setConfirm('remove')}>
           <Trash2 size={15} /> Excluir
         </button>
       </div>
@@ -67,6 +81,27 @@ export default function PatientWorkspace() {
       </nav>
 
       <Outlet context={{ patient }} />
+
+      {confirm === 'remove' && (
+        <ConfirmModal
+          title="Excluir paciente"
+          message={`Excluir ${patient.full_name} e todos os dados dele(a)? Isso não pode ser desfeito.`}
+          confirmLabel="Excluir"
+          danger
+          onConfirm={remove}
+          onClose={() => setConfirm(null)}
+        />
+      )}
+      {confirm === 'anonymize' && (
+        <ConfirmModal
+          title="Anonimizar paciente"
+          message="Nome, contato, observações e fotos serão apagados; o registro clínico e a rastreabilidade são mantidos. Isso não pode ser desfeito."
+          confirmLabel="Anonimizar"
+          danger
+          onConfirm={anonymize}
+          onClose={() => setConfirm(null)}
+        />
+      )}
     </>
   )
 }

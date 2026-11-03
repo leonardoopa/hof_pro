@@ -1,7 +1,8 @@
-import { Camera, CheckCheck, ChevronLeft, Crosshair, Minus, Plus, Save, ScanFace, Sparkles, Trash2, Upload } from 'lucide-react'
+import { Camera, CheckCheck, ChevronLeft, Crosshair, Eye, EyeOff, Minus, Plus, Save, ScanFace, Sparkles, Trash2, Upload } from 'lucide-react'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useOutletContext } from 'react-router-dom'
 import { api } from '../api/client'
+import ConfirmModal from '../components/ConfirmModal'
 import ErrorList from '../components/ErrorList'
 import { useToast } from '../components/Toast'
 import CameraCapture from '../planning/CameraCapture'
@@ -21,6 +22,7 @@ import {
   treatmentOf,
 } from '../planning/regions'
 import { renderSimulation } from '../planning/simulate'
+import SymmetryPanel from '../planning/SymmetryPanel'
 import { DEPTHS, TECHNIQUES, UNIT_BY_TREATMENT, lotLabel } from '../planning/technique'
 import { buildTemplate, fallbackTemplate } from '../planning/template'
 
@@ -60,6 +62,8 @@ export default function PlanningStep() {
   const [dirty, setDirty] = useState(false)
   const [busy, setBusy] = useState(false)
   const [camera, setCamera] = useState(false)
+  const [confirm, setConfirm] = useState(null) // { title, message, confirmLabel, onConfirm }
+  const [suggested, setSuggested] = useState([]) // regiões destacadas pelo painel de simetria
   const [lots, setLots] = useState([]) // lotes disponíveis (saldo > 0 e válidos) do estoque
 
   const [treatment, setTreatment] = useState('preenchimento')
@@ -67,6 +71,7 @@ export default function PlanningStep() {
   const [hoverRegion, setHoverRegion] = useState(null)
   const [selected, setSelected] = useState(null)
   const [adding, setAdding] = useState(false)
+  const [showMarks, setShowMarks] = useState(true) // false = foto limpa, sem pontos nem rótulos
 
   // Simulação: liga sozinha quando algum ponto tem quantidade; o botão só sobrepõe essa escolha.
   const [simChoice, setSimChoice] = useState(null) // null = automático
@@ -80,13 +85,24 @@ export default function PlanningStep() {
   const compare = simChoice ?? points.some((p) => p.amount > 0)
 
   // ---- carregar foto + pontos ----
+  // Detecção feita uma única vez por imagem; o posicionamento dos pontos e o painel de simetria compartilham o resultado.
+  const landmarkCache = useRef(new WeakMap())
+  const getLandmarks = useCallback((img) => {
+    if (!landmarkCache.current.has(img)) {
+      const pending = detectFace(img)
+      landmarkCache.current.set(img, pending)
+      pending.catch(() => landmarkCache.current.delete(img)) // permite tentar de novo após falha
+    }
+    return landmarkCache.current.get(img)
+  }, [])
+
   const placeToken = useRef(0)
   const placeAutomatically = useCallback(async (img) => {
     const token = ++placeToken.current // ignora o resultado se outra foto entrou no lugar
     setDetect('running')
     let template
     try {
-      const landmarks = await detectFace(img)
+      const landmarks = await getLandmarks(img)
       template = landmarks ? buildTemplate(landmarks, img.naturalWidth, img.naturalHeight) : fallbackTemplate()
       setDetect(landmarks ? 'found' : 'fallback')
     } catch {
@@ -95,7 +111,7 @@ export default function PlanningStep() {
     }
     if (token !== placeToken.current) return
     setPoints(template.map((t) => withUid({ ...t, treatment: 'preenchimento', amount: 0 })))
-  }, [])
+  }, [getLandmarks])
 
   const showPhoto = useCallback(
     async (meta, savedPoints) => {
@@ -250,16 +266,38 @@ export default function PlanningStep() {
     setSelected(null)
   }
 
+  function toggleMarks() {
+    if (showMarks) {
+      setSimChoice(true) // sem os pontos na frente, mostra o resultado simulado
+      setAdding(false)
+    }
+    setShowMarks(!showMarks)
+  }
+
   // ---- foto ----
-  async function addPhoto(file) {
+  function addPhoto(file) {
     if (!file) return
-    if (points.some((p) => p.amount > 0) && !window.confirm('Trocar a foto recria os pontos e zera as quantidades. Continuar?')) return
+    if (points.some((p) => p.amount > 0)) {
+      setConfirm({
+        title: 'Trocar a foto',
+        message: 'Trocar a foto recria os pontos e zera as quantidades. Continuar?',
+        confirmLabel: 'Trocar foto',
+        onConfirm: () => uploadPhoto(file),
+      })
+      setCamera(false)
+      return
+    }
+    return uploadPhoto(file)
+  }
+
+  async function uploadPhoto(file) {
     setBusy(true)
     setError(null)
     try {
       const meta = await api.photos.upload(patient.id, file, 'frontal')
       await showPhoto(meta, null)
       closeRegion()
+      setShowMarks(true) // foto nova: pontos recriados ficam visíveis para ajuste
       setCamera(false)
       setDirty(true)
     } catch (err) {
@@ -299,8 +337,16 @@ export default function PlanningStep() {
     }
   }
 
+  function askMarkApplied() {
+    setConfirm({
+      title: 'Marcar como aplicado',
+      message: 'Marcar como aplicado dá baixa no saldo dos lotes informados e trava a edição deste plano. Continuar?',
+      confirmLabel: 'Marcar como aplicado',
+      onConfirm: markApplied,
+    })
+  }
+
   async function markApplied() {
-    if (!window.confirm('Marcar como aplicado dá baixa no saldo dos lotes informados e trava a edição deste plano. Continuar?')) return
     setBusy(true)
     setError(null)
     try {
@@ -409,7 +455,13 @@ export default function PlanningStep() {
                     ))}
                   </div>
                 )}
-                <button className={`btn small ${adding ? 'primary' : ''}`} onClick={() => setAdding(!adding)}>
+                <button
+                  className={`btn small ${adding ? 'primary' : ''}`}
+                  onClick={() => {
+                    setShowMarks(true) // o ponto novo precisa aparecer
+                    setAdding(!adding)
+                  }}
+                >
                   <Crosshair size={15} /> {adding ? 'Toque na foto…' : 'Adicionar ponto'}
                 </button>
               </div>
@@ -422,9 +474,11 @@ export default function PlanningStep() {
               zone={zone}
               selectedId={selected}
               hoverRegion={hoverRegion}
+              suggested={suggested}
               adding={adding}
               simUrl={compare ? simUrl : null}
               split={split}
+              showMarks={showMarks}
               onPickRegion={openRegion}
               onHoverRegion={setHoverRegion}
               onSelectPoint={setSelected}
@@ -435,6 +489,9 @@ export default function PlanningStep() {
             <div className="stage-foot">
               <button className={`btn small ${compare ? 'primary' : ''}`} onClick={() => setSimChoice(!compare)} aria-pressed={compare}>
                 <Sparkles size={15} /> Simular resultado
+              </button>
+              <button className={`btn small ${showMarks ? '' : 'primary'}`} onClick={toggleMarks} aria-pressed={!showMarks}>
+                {showMarks ? <EyeOff size={15} /> : <Eye size={15} />} {showMarks ? 'Ocultar pontos' : 'Mostrar pontos'}
               </button>
               {compare && (
                 <label className="split">
@@ -491,7 +548,7 @@ export default function PlanningStep() {
           </button>
           {plan && !applied && (
             <div className="applied-bar">
-              <button className="btn wide" onClick={markApplied} disabled={busy || dirty} title={dirty ? 'Salve o plano antes' : undefined}>
+              <button className="btn wide" onClick={askMarkApplied} disabled={busy || dirty} title={dirty ? 'Salve o plano antes' : undefined}>
                 <CheckCheck size={16} /> Marcar como aplicado
               </button>
             </div>
@@ -521,7 +578,7 @@ export default function PlanningStep() {
                       <button
                         key={key}
                         type="button"
-                        className={`region-row ${hoverRegion === key ? 'hover' : ''}`}
+                        className={`region-row ${hoverRegion === key ? 'hover' : ''} ${suggested.includes(key) ? 'suggest' : ''}`}
                         onClick={() => openRegion(key)}
                         onMouseEnter={() => setHoverRegion(key)}
                         onMouseLeave={() => setHoverRegion(null)}
@@ -643,6 +700,8 @@ export default function PlanningStep() {
           </section>
         )}
 
+        {image && <SymmetryPanel image={image} getLandmarks={getLandmarks} suggested={suggested} onSuggest={setSuggested} />}
+
         <section className="card">
           <div className="card-title">Observações</div>
           <textarea
@@ -658,6 +717,7 @@ export default function PlanningStep() {
       </aside>
 
       {camera && <CameraCapture onCapture={addPhoto} onClose={() => setCamera(false)} />}
+      {confirm && <ConfirmModal {...confirm} onClose={() => setConfirm(null)} />}
       {toastNode}
     </div>
   )

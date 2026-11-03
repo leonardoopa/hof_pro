@@ -5,6 +5,7 @@ import { api } from '../api/client'
 import { initials } from '../components/AppLayout'
 import ErrorList from '../components/ErrorList'
 import Modal from '../components/Modal'
+import Onboarding from '../components/Onboarding'
 
 export function ageFrom(birthDate) {
   if (!birthDate) return null
@@ -74,6 +75,7 @@ export default function PatientsPage() {
   const [patients, setPatients] = useState(null)
   const [error, setError] = useState(null)
   const [creating, setCreating] = useState(false)
+  const [hasProducts, setHasProducts] = useState(false)
 
   const load = useCallback(
     (q) =>
@@ -86,6 +88,10 @@ export default function PatientsPage() {
         .catch(setError),
     [],
   )
+
+  useEffect(() => {
+    api.inventory.products().then((rows) => setHasProducts(rows.length > 0)).catch(() => {})
+  }, [])
 
   useEffect(() => {
     const timer = setTimeout(() => load(query), 250)
@@ -119,14 +125,13 @@ export default function PatientsPage() {
 
       <ErrorList error={error} />
 
-      {patients && patients.length === 0 && (
+      {patients && patients.length === 0 && !query && (
+        <Onboarding hasProducts={hasProducts} onNewPatient={() => setCreating(true)} onDemoLoaded={() => load('')} />
+      )}
+
+      {patients && patients.length === 0 && query && (
         <div className="card empty">
-          <p>{query ? 'Nenhum paciente encontrado.' : 'Nenhum paciente cadastrado ainda.'}</p>
-          {!query && (
-            <button className="btn primary" onClick={() => setCreating(true)}>
-              Cadastrar primeiro paciente
-            </button>
-          )}
+          <p>Nenhum paciente encontrado.</p>
         </div>
       )}
 

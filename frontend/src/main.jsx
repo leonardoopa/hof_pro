@@ -10,6 +10,7 @@ import { initTheme } from './theme'
 import './styles/point-detail.css'
 import './styles/inventory.css'
 import './styles/consent.css'
+import './styles/reports.css'
 
 initTheme()
 

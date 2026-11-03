@@ -36,9 +36,11 @@ export default function FaceStage({
   zone,
   selectedId,
   hoverRegion,
+  suggested = [],
   adding,
   simUrl,
   split,
+  showMarks = true,
   onPickRegion,
   onHoverRegion,
   onSelectPoint,
@@ -57,7 +59,9 @@ export default function FaceStage({
     }
   }
 
-  const zonePoints = zone ? points.filter((p) => inZone(p, zone)) : []
+  // Pontos desenhados sobre a foto. Ocultos, sobra só a foto (ou a simulação); o zoom continua seguindo os pontos.
+  const marks = showMarks ? points : []
+  const zonePoints = zone ? marks.filter((p) => inZone(p, zone)) : []
 
   return (
     <div
@@ -86,7 +90,7 @@ export default function FaceStage({
         )}
 
         {!zone &&
-          points
+          marks
             .filter((p) => p.amount > 0)
             .map((p) => (
               <i
@@ -99,17 +103,18 @@ export default function FaceStage({
         {!zone &&
           REGIONS.flatMap(({ key, label }) =>
             ['D', 'E', 'C']
-              .map((side) => ({ key, label, side, pts: points.filter((p) => p.region === key && p.side === side) }))
+              .map((side) => ({ key, label, side, pts: marks.filter((p) => p.region === key && p.side === side) }))
               .filter((g) => g.pts.length),
           ).map(({ key, label, side, pts }) => {
             const c = centroid(pts)
             const total = totalsOf(pts)
             const name = side === 'C' ? label : `${label} (${SIDE_LABEL[side].toLowerCase()})`
+            const shortName = side === 'C' ? label : `${label} ${side}` // na foto: D/E, lado do paciente
             return (
               <button
                 key={`${key}-${side}`}
                 type="button"
-                className={`hotspot ${hoverRegion === key ? 'hover' : ''} ${total.areas ? 'filled' : ''}`}
+                className={`hotspot side-${side} ${hoverRegion === key ? 'hover' : ''} ${total.areas ? 'filled' : ''} ${suggested.includes(key) ? 'suggest' : ''}`}
                 style={{ left: `${c.x * 100}%`, top: `${c.y * 100}%` }}
                 onClick={() => onPickRegion(key, side)}
                 onMouseEnter={() => onHoverRegion(key)}
@@ -117,7 +122,7 @@ export default function FaceStage({
                 aria-label={`${name}: ${describeTotals(total)}. Abrir região`}
               >
                 <span className="hotspot-label">
-                  {name}
+                  {shortName}
                   {total.areas > 0 && <b>{describeTotals(total)}</b>}
                 </span>
               </button>
@@ -125,7 +130,7 @@ export default function FaceStage({
           })}
 
         {zone &&
-          points
+          marks
             .filter((p) => !inZone(p, zone) && p.amount > 0)
             .map((p) => (
               <i

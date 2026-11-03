@@ -1,6 +1,7 @@
 import { AlertTriangle, History, Package, Plus, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { api } from '../api/client'
+import ConfirmModal from '../components/ConfirmModal'
 import ErrorList from '../components/ErrorList'
 import Modal from '../components/Modal'
 import { fmtDate } from '../planning/technique'
@@ -72,6 +73,53 @@ function ProductModal({ onClose, onSaved }) {
         <label className="field">
           <span>Registro Anvisa</span>
           <input className="input" value={form.anvisa_registration} onChange={set('anvisa_registration')} />
+        </label>
+        <div className="modal-actions">
+          <button type="button" className="btn" onClick={onClose}>
+            Cancelar
+          </button>
+          <button className="btn primary" disabled={busy}>
+            Salvar
+          </button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+function AdjustModal({ lot, onClose, onSaved }) {
+  const [balance, setBalance] = useState(String(lot.balance))
+  const [reason, setReason] = useState('')
+  const [error, setError] = useState(null)
+  const [busy, setBusy] = useState(false)
+
+  async function submit(e) {
+    e.preventDefault()
+    const value = Number(balance.replace(',', '.'))
+    if (!Number.isFinite(value) || value < 0) return setError(new Error('Saldo inválido.'))
+    if (!reason.trim()) return setError(new Error('Informe o motivo do ajuste.'))
+    setBusy(true)
+    setError(null)
+    try {
+      await api.inventory.updateLot(lot.id, { balance: value, reason: reason.trim() })
+      onSaved()
+    } catch (err) {
+      setError(err)
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Modal title={`Ajustar saldo do lote ${lot.number}`} onClose={onClose}>
+      <form onSubmit={submit}>
+        <ErrorList error={error} />
+        <label className="field">
+          <span>Novo saldo ({lot.unit})</span>
+          <input className="input" inputMode="decimal" value={balance} onChange={(e) => setBalance(e.target.value)} required autoFocus />
+        </label>
+        <label className="field">
+          <span>Motivo do ajuste (obrigatório)</span>
+          <input className="input" value={reason} onChange={(e) => setReason(e.target.value)} required />
         </label>
         <div className="modal-actions">
           <button type="button" className="btn" onClick={onClose}>
@@ -185,6 +233,8 @@ export default function InventoryPage() {
   const [alerts, setAlerts] = useState({ expired: [], expiring: [] })
   const [error, setError] = useState(null)
   const [modal, setModal] = useState(null) // 'product' | 'lot'
+  const [adjusting, setAdjusting] = useState(null) // lote em ajuste de saldo
+  const [removing, setRemoving] = useState(null) // { kind: 'product' | 'lot', item }
   const [openHistory, setOpenHistory] = useState(null) // id do lote com histórico aberto
 
   const load = useCallback(async () => {
@@ -210,16 +260,6 @@ export default function InventoryPage() {
     } catch (err) {
       setError(err)
     }
-  }
-
-  function adjust(lot) {
-    const value = window.prompt(`Novo saldo do lote ${lot.number} (${lot.unit}):`, lot.balance)
-    if (value === null) return
-    const balance = Number(value.replace(',', '.'))
-    if (!Number.isFinite(balance) || balance < 0) return setError(new Error('Saldo inválido.'))
-    const reason = window.prompt('Motivo do ajuste (obrigatório):')
-    if (!reason?.trim()) return setError(new Error('Informe o motivo do ajuste.'))
-    run(() => api.inventory.updateLot(lot.id, { balance, reason: reason.trim() }))
   }
 
   const done = () => {
@@ -296,7 +336,7 @@ export default function InventoryPage() {
                 <button
                   className="icon-btn"
                   aria-label={`Excluir ${product.name}`}
-                  onClick={() => window.confirm('Excluir o produto e seus lotes?') && run(() => api.inventory.removeProduct(product.id))}
+                  onClick={() => setRemoving({ kind: 'product', item: product })}
                 >
                   <Trash2 size={15} />
                 </button>
@@ -340,13 +380,13 @@ export default function InventoryPage() {
                             >
                               <History size={14} />
                             </button>
-                            <button className="icon-btn" aria-label={`Ajustar saldo do lote ${lot.number}`} onClick={() => adjust(lot)}>
+                            <button className="icon-btn" aria-label={`Ajustar saldo do lote ${lot.number}`} onClick={() => setAdjusting(lot)}>
                               <SlidersHorizontal size={14} />
                             </button>
                             <button
                               className="icon-btn"
                               aria-label={`Excluir lote ${lot.number}`}
-                              onClick={() => window.confirm('Excluir este lote?') && run(() => api.inventory.removeLot(lot.id))}
+                              onClick={() => setRemoving({ kind: 'lot', item: lot })}
                             >
                               <Trash2 size={14} />
                             </button>
@@ -368,6 +408,28 @@ export default function InventoryPage() {
 
       {modal === 'product' && <ProductModal onClose={() => setModal(null)} onSaved={done} />}
       {modal === 'lot' && <LotModal products={activeProducts} onClose={() => setModal(null)} onSaved={done} />}
+      {adjusting && (
+        <AdjustModal
+          lot={adjusting}
+          onClose={() => setAdjusting(null)}
+          onSaved={() => {
+            setAdjusting(null)
+            load()
+          }}
+        />
+      )}
+      {removing && (
+        <ConfirmModal
+          title={removing.kind === 'product' ? 'Excluir produto' : 'Excluir lote'}
+          message={removing.kind === 'product' ? 'Excluir o produto e seus lotes?' : `Excluir o lote ${removing.item.number}?`}
+          confirmLabel="Excluir"
+          danger
+          onConfirm={() =>
+            run(() => (removing.kind === 'product' ? api.inventory.removeProduct(removing.item.id) : api.inventory.removeLot(removing.item.id)))
+          }
+          onClose={() => setRemoving(null)}
+        />
+      )}
     </div>
   )
 }

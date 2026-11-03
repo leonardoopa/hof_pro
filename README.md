@@ -18,8 +18,11 @@ Django e FastAPI rodam no **mesmo processo**: `backend/config/asgi.py` monta o D
 ### Com Docker (recomendado)
 
 ```bash
+cp .env.example .env   # opcional: sem ele valem os mesmos valores de desenvolvimento
 docker compose up --build
 ```
+
+O projeto tem um único arquivo de configuração (`.env` na raiz, modelo em `.env.example`) e um único `requirements.txt` (na raiz). Com Docker não é preciso instalar nada além do Docker: as imagens instalam o `requirements.txt` e o `package.json` sozinhas.
 
 Abra http://localhost:5173 e crie sua conta em `/cadastro`. A API fica em http://localhost:8000/docs e o admin Django em http://localhost:8000/admin/.
 
@@ -27,7 +30,7 @@ O compose sobe três serviços: SQL Server, backend (espera o banco, cria o banc
 
 - Primeira subida baixa cerca de 1,5 GB de imagens.
 - Mac Apple Silicon: Docker Desktop > Settings > General > "Use Rosetta for x86_64/amd64 emulation" (a imagem do SQL Server só existe para amd64).
-- Senha do SQL Server (`sa`) e chave do Django têm valores de desenvolvimento. Para trocar, crie um `.env` na raiz com `DB_PASSWORD` e `DJANGO_SECRET_KEY`. A senha fica gravada no volume na primeira subida; para trocar depois use `docker compose down -v`.
+- Senha do SQL Server (`sa`) e chave do Django têm valores de desenvolvimento. Para trocar, edite `DB_PASSWORD` e `DJANGO_SECRET_KEY` no `.env`. A senha fica gravada no volume na primeira subida; para trocar depois use `docker compose down -v`.
 - O build do backend instala o driver ODBC 18 da Microsoft e aceita a licença dele (`ACCEPT_EULA=Y` no `backend/Dockerfile`).
 - Parar: `docker compose down`. Apagar também banco e fotos: `docker compose down -v`.
 
@@ -36,11 +39,11 @@ O compose sobe três serviços: SQL Server, backend (espera o banco, cria o banc
 Backend (SQLite, sem precisar de SQL Server):
 
 ```bash
-cd backend
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-printf 'DB_ENGINE=sqlite\n' > .env
-.venv/bin/python manage.py migrate
-.venv/bin/uvicorn config.asgi:application --reload --port 8000
+cp .env.example .env   # e, no .env, troque DB_ENGINE=mssql por DB_ENGINE=sqlite
+cd backend
+../.venv/bin/python manage.py migrate
+../.venv/bin/uvicorn config.asgi:application --reload --port 8000
 ```
 
 Frontend:
@@ -51,9 +54,9 @@ npm install
 npm run dev        # http://localhost:5173 (proxy de /api para :8000)
 ```
 
-Para usar SQL Server sem Docker no backend, instale o driver (`brew tap microsoft/mssql-release && brew install msodbcsql18`), copie `backend/.env.example` para `backend/.env`, rode `manage.py ensure_db` (cria o banco) e depois `migrate`.
+Para usar SQL Server sem Docker no backend, instale o driver (`brew tap microsoft/mssql-release && brew install msodbcsql18`), deixe `DB_ENGINE=mssql` no `.env` da raiz e ajuste os `DB_*`, rode `manage.py ensure_db` (cria o banco) e depois `migrate`.
 
-Testes (SQLite, não precisam de SQL Server): `cd backend && .venv/bin/python -m pytest`
+Testes (SQLite, não precisam de SQL Server): `cd backend && ../.venv/bin/python -m pytest`
 
 ## O que existe
 
