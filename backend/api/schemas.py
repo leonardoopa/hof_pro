@@ -69,6 +69,7 @@ class PatientOut(ORM):
     phone: str
     email: str
     notes: str
+    anonymized_at: datetime | None = None
     created_at: datetime
 
 

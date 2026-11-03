@@ -3,13 +3,16 @@ import io
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.db.models import Count, Q
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from django.utils import timezone
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.responses import FileResponse
 from PIL import Image, ImageOps
 
 from apps.accounts.models import User
+from apps.audit.models import AccessLog
 from apps.patients.models import Patient, PatientPhoto
 
+from ..audit import log_access
 from ..deps import current_user, get_patient_or_404
 from ..orm import orm, run
 from ..schemas import PatientIn, PatientOut, PatientPatch, PhotoOut
@@ -63,6 +66,8 @@ def get_patient(patient_id: int, user: User = Depends(current_user)):
 @orm
 def update_patient(patient_id: int, data: PatientPatch, user: User = Depends(current_user)):
     patient = get_patient_or_404(user, patient_id)
+    if patient.anonymized_at is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Paciente anonimizado: os dados pessoais não podem mais ser alterados.")
     for field, value in data.model_dump(exclude_unset=True).items():
         if field == "full_name" and value is None:
             continue
@@ -75,11 +80,38 @@ def update_patient(patient_id: int, data: PatientPatch, user: User = Depends(cur
 
 @router.delete("/patients/{patient_id}", status_code=status.HTTP_204_NO_CONTENT)
 @orm
-def delete_patient(patient_id: int, user: User = Depends(current_user)):
+def delete_patient(patient_id: int, request: Request, user: User = Depends(current_user)):
     patient = get_patient_or_404(user, patient_id)
+    if patient.applications.exists():
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Paciente com aplicações registradas não pode ser excluído (rastreabilidade). Use a anonimização.",
+        )
+    pid = patient.id
     for photo in patient.photos.all():
         photo.image.delete(save=False)
     patient.delete()
+    log_access(user, AccessLog.Action.DELETE, "paciente", pid, request)
+
+
+@router.post("/patients/{patient_id}/anonymize", response_model=PatientOut)
+@orm
+def anonymize_patient(patient_id: int, request: Request, user: User = Depends(current_user)):
+    """Remove os dados pessoais e as fotos, preservando o registro clínico (irreversível)."""
+    patient = get_patient_or_404(user, patient_id)
+    if patient.anonymized_at is None:
+        for photo in patient.photos.all():
+            photo.image.delete(save=False)
+            photo.delete()
+        patient.full_name = f"Paciente anonimizado #{patient.id}"
+        patient.birth_date = None
+        patient.phone = ""
+        patient.email = ""
+        patient.notes = ""
+        patient.anonymized_at = timezone.now()
+        patient.save()
+        log_access(user, AccessLog.Action.ANONYMIZE, "paciente", patient.id, request)
+    return patient
 
 
 # ---- fotos ----
@@ -102,6 +134,8 @@ def _normalize_image(raw: bytes) -> tuple[bytes, int, int]:
 
 def _save_photo(user: User, patient_id: int, kind: str, data: bytes) -> PatientPhoto:
     patient = get_patient_or_404(user, patient_id)
+    if patient.anonymized_at is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Paciente anonimizado: não é possível anexar fotos.")
     jpeg, width, height = _normalize_image(data)
     photo = PatientPhoto(patient=patient, kind=kind, width=width, height=height)
     photo.image.save("foto.jpg", ContentFile(jpeg), save=False)
@@ -139,8 +173,9 @@ def _own_photo(user: User, photo_id: int) -> PatientPhoto:
 
 
 @router.get("/photos/{photo_id}/file")
-async def photo_file(photo_id: int, user: User = Depends(current_user)):
+async def photo_file(photo_id: int, request: Request, user: User = Depends(current_user)):
     photo = await run(_own_photo)(user, photo_id)
+    await run(log_access)(user, AccessLog.Action.VIEW, "foto", photo.id, request)
     return FileResponse(photo.image.path, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=3600"})
 
 
