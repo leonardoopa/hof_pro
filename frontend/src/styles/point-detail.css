@@ -1,0 +1,16 @@
+/* Detalhes do ponto (técnica, plano, lote) no painel de planejamento. */
+.pdetail {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin: -2px 0 8px;
+  padding: 8px 10px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.pdetail .input.mini { width: 100%; min-width: 0; }
+.pdetail .lot { grid-column: 1 / -1; }
+.pdetail label > span { display: block; font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+.applied-bar { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.alert.ok { background: var(--ok-soft); color: var(--ok); margin-bottom: 0; }
