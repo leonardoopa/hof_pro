@@ -172,6 +172,18 @@
   color: var(--primary-strong);
   font-weight: var(--weight-semibold);
 }
+/* Lados D/E: o rótulo cresce para fora do rosto, assim o par (ex.: olheiras) não se sobrepõe. */
+.hotspot.side-D .hotspot-label {
+  left: auto;
+  right: -4px;
+  align-items: flex-end;
+  transform: none;
+}
+.hotspot.side-E .hotspot-label {
+  left: -4px;
+  align-items: flex-start;
+  transform: none;
+}
 .hotspot.filled .hotspot-label,
 .hotspot.hover .hotspot-label,
 .hotspot:hover .hotspot-label,

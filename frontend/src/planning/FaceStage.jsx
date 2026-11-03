@@ -106,11 +106,12 @@ export default function FaceStage({
             const c = centroid(pts)
             const total = totalsOf(pts)
             const name = side === 'C' ? label : `${label} (${SIDE_LABEL[side].toLowerCase()})`
+            const shortName = side === 'C' ? label : `${label} ${side}` // na foto: D/E, lado do paciente
             return (
               <button
                 key={`${key}-${side}`}
                 type="button"
-                className={`hotspot ${hoverRegion === key ? 'hover' : ''} ${total.areas ? 'filled' : ''} ${suggested.includes(key) ? 'suggest' : ''}`}
+                className={`hotspot side-${side} ${hoverRegion === key ? 'hover' : ''} ${total.areas ? 'filled' : ''} ${suggested.includes(key) ? 'suggest' : ''}`}
                 style={{ left: `${c.x * 100}%`, top: `${c.y * 100}%` }}
                 onClick={() => onPickRegion(key, side)}
                 onMouseEnter={() => onHoverRegion(key)}
@@ -118,7 +119,7 @@ export default function FaceStage({
                 aria-label={`${name}: ${describeTotals(total)}. Abrir região`}
               >
                 <span className="hotspot-label">
-                  {name}
+                  {shortName}
                   {total.areas > 0 && <b>{describeTotals(total)}</b>}
                 </span>
               </button>
