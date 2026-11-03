@@ -27,6 +27,7 @@ services:
       DB_USER: sa
       DB_PASSWORD: ${DB_PASSWORD:-HofPro!Dev2026}
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-dev-insecure-key-change-me-0123456789abcdef}
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,backend
       MEDIA_ROOT: /data/media
     command: >
       sh -c "python manage.py ensure_db &&
