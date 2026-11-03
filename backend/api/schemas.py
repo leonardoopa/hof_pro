@@ -7,8 +7,10 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, PlainSerializer
 # Decimal no banco; número JSON na resposta.
 Amount = Annotated[Decimal, PlainSerializer(float, return_type=float, when_used="json")]
 
-RegionKey = Literal["testa", "temporas", "olheiras", "malar", "nasolabial", "mandibula", "mento"]
+RegionKey = Literal["testa", "temporas", "olheiras", "malar", "nasolabial", "mandibula", "mento", "boca"]
 TreatmentKey = Literal["botox", "preenchimento", "bioestimulador", "skinbooster", "outro"]
+TechniqueKey = Literal["bolus", "retroinjecao", "leque", "canula", "microgotas", "papula", "outra", ""]
+DepthKey = Literal["intradermico", "subdermico", "subcutaneo", "supraperiosteal", "intramuscular", ""]
 
 
 class ORM(BaseModel):
@@ -116,6 +118,10 @@ class PointIn(BaseModel):
     x: float = Field(ge=0, le=1)
     y: float = Field(ge=0, le=1)
     amount: Decimal = Field(default=Decimal("0"), ge=0, le=200, max_digits=6, decimal_places=2)
+    # Opcionais: planos antigos e clientes antigos continuam válidos.
+    technique: TechniqueKey = ""
+    depth: DepthKey = ""
+    lot_id: int | None = None
 
 
 class PlanIn(BaseModel):
@@ -133,6 +139,9 @@ class PointOut(ORM):
     y: float
     amount: Amount
     unit: str
+    technique: str
+    depth: str
+    lot_id: int | None
 
 
 class PlanTotals(BaseModel):
@@ -149,6 +158,7 @@ class PlanOut(BaseModel):
     notes: str
     created_at: datetime
     updated_at: datetime
+    applied_at: datetime | None = None
     totals: PlanTotals
     points: list[PointOut]
 
@@ -158,4 +168,5 @@ class PlanSummaryOut(BaseModel):
     title: str
     photo_id: int | None
     created_at: datetime
+    applied_at: datetime | None = None
     totals: PlanTotals

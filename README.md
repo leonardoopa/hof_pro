@@ -66,7 +66,13 @@ Testes (SQLite, não precisam de SQL Server): `cd backend && .venv/bin/python -m
   - tocar numa região dá zoom e mostra os pontos; cada ponto tem produto e quantidade, pode ser arrastado, removido ou adicionado;
   - resumo ao vivo: total de ml (preenchimentos), unidades (toxina) e número de áreas;
   - **Simular resultado**: comparação antes/depois ilustrativa (suavização para toxina, volume local para preenchedores).
-- Estoque, Prontuário/Termos, Resumo e Financeiro aparecem como "Em breve".
+- **Região boca** (lábios) e **técnica / profundidade / lote** por ponto no mapa facial.
+- **Estoque**: produtos (marca, unidade, registro Anvisa) e lotes com validade e saldo; alerta de vencimento (30 dias); "Marcar como aplicado" dá baixa atômica nos lotes (bloqueia lote vencido, unidade incompatível e saldo insuficiente) e grava o **cartão de rastreabilidade** imprimível por paciente.
+- **Prontuário / Termos**: termos versionados, assinatura desenhada no canvas (PNG), hash SHA-256 do conteúdo, data/hora e IP; autorização de uso de imagem separada e revogável; documento imprimível.
+- **Evolução**: comparação antes/depois de fotos do paciente, com alinhamento pelos olhos.
+- **Resumo e Orientações**: orientações pós-procedimento por tratamento, geradas a partir do plano, imprimíveis.
+- **Design system** (`styles/tokens.css`) com tema claro/escuro e alternador.
+- Financeiro aparece como "Em breve".
 
 ## Decisões e limites
 
@@ -77,10 +83,8 @@ Testes (SQLite, não precisam de SQL Server): `cd backend && .venv/bin/python -m
 - O MediaPipe roda localmente: a foto não vai para nenhum serviço. Só o runtime WASM (jsDelivr) e o modelo (Google Storage) são baixados; para produção ou uso offline, hospede os dois (`frontend/src/planning/faceLandmarks.js`).
 - Sem rate limit no login e sem refresh token ainda.
 
-## Próximos passos (do esboço)
+## Próximos passos
 
-1. Estoque com marca / lote / validade e alerta de vencimento.
-2. Prontuário e termos de consentimento com assinatura digital, depois do planejamento.
-3. Resumo e orientações pós-procedimento.
-4. Financeiro e aba de histórico por paciente.
-5. Simulação por IA a partir do planejamento.
+1. Financeiro (orçamentos e recebimentos) e histórico por paciente.
+2. Simulação por IA a partir do planejamento.
+3. Tratamento de exclusão de paciente com aplicações (devolver saldo ou bloquear) e testes de front.

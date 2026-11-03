@@ -25,6 +25,7 @@ def _plan_out(plan: FacialPlan) -> PlanOut:
         notes=plan.notes,
         created_at=plan.created_at,
         updated_at=plan.updated_at,
+        applied_at=plan.applied_at,
         totals=_totals(plan),
         points=[PointOut.model_validate(p) for p in plan.points.all()],
     )
@@ -43,6 +44,9 @@ def _check_photo(patient, photo_id):
 
 
 def _replace_points(plan: FacialPlan, points) -> None:
+    from .inventory import validate_point_lots  # import tardio: inventory importa _own_plan daqui
+
+    validate_point_lots(plan.patient.owner, points)
     plan.points.all().delete()
     PlanPoint.objects.bulk_create(
         PlanPoint(
@@ -52,6 +56,9 @@ def _replace_points(plan: FacialPlan, points) -> None:
             x=p.x,
             y=p.y,
             amount=p.amount,
+            technique=p.technique,
+            depth=p.depth,
+            lot_id=p.lot_id,
             unit=UNIT_BY_TREATMENT[p.treatment],
         )
         for p in points
@@ -64,7 +71,9 @@ def list_plans(patient_id: int, user: User = Depends(current_user)):
     patient = get_patient_or_404(user, patient_id)
     plans = patient.plans.prefetch_related("points")
     return [
-        PlanSummaryOut(id=p.id, title=p.title, photo_id=p.photo_id, created_at=p.created_at, totals=_totals(p))
+        PlanSummaryOut(
+            id=p.id, title=p.title, photo_id=p.photo_id, created_at=p.created_at, applied_at=p.applied_at, totals=_totals(p)
+        )
         for p in plans
     ]
 
@@ -92,6 +101,8 @@ def get_plan(plan_id: int, user: User = Depends(current_user)):
 @orm
 def update_plan(plan_id: int, data: PlanIn, user: User = Depends(current_user)):
     plan = _own_plan(user, plan_id)
+    if plan.applied_at:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Plano já aplicado não pode ser alterado: crie um novo plano.")
     _check_photo(plan.patient, data.photo_id)
     with transaction.atomic():
         plan.photo_id = data.photo_id

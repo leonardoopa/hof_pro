@@ -3,7 +3,7 @@ from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .orm import DbConnectionMiddleware
-from .routers import anamnesis, auth, patients, plans
+from .routers import anamnesis, auth, consent, guidance, inventory, patients, plans
 
 
 def create_app(django_app=None) -> FastAPI:
@@ -19,7 +19,7 @@ def create_app(django_app=None) -> FastAPI:
     )
 
     api = APIRouter(prefix="/api")
-    for module in (auth, patients, anamnesis, plans):
+    for module in (auth, patients, anamnesis, plans, guidance, inventory, consent):
         api.include_router(module.router)
 
     @api.get("/health", tags=["infra"])
