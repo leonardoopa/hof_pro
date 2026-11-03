@@ -1,16 +1,55 @@
-# SQL Server para desenvolvimento.
-# Em Mac Apple Silicon: Docker Desktop > Settings > General > "Use Rosetta for x86_64/amd64 emulation".
+# Sobe tudo: SQL Server + backend (Django/FastAPI) + frontend (Vite).
+#   docker compose up --build        -> http://localhost:5173
+# Em Mac Apple Silicon: Docker Desktop > Settings > General > "Use Rosetta for x86_64/amd64 emulation"
+# (a imagem do SQL Server só existe para amd64).
+#
+# Variáveis opcionais em um arquivo .env nesta pasta: DB_PASSWORD, DJANGO_SECRET_KEY.
 services:
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-latest
     platform: linux/amd64
     environment:
       ACCEPT_EULA: "Y"
-      MSSQL_SA_PASSWORD: ${DB_PASSWORD:?defina DB_PASSWORD}
+      MSSQL_SA_PASSWORD: ${DB_PASSWORD:-HofPro!Dev2026}
     ports:
-      - "1433:1433"
+      - "127.0.0.1:1433:1433" # só a própria máquina enxerga o banco
     volumes:
       - sqlserver_data:/var/opt/mssql
 
+  backend:
+    build: ./backend
+    depends_on:
+      - sqlserver
+    environment:
+      DB_ENGINE: mssql
+      DB_HOST: sqlserver
+      DB_NAME: hofpro
+      DB_USER: sa
+      DB_PASSWORD: ${DB_PASSWORD:-HofPro!Dev2026}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-dev-insecure-key-change-me-0123456789abcdef}
+      MEDIA_ROOT: /data/media
+    command: >
+      sh -c "python manage.py ensure_db &&
+             python manage.py migrate &&
+             uvicorn config.asgi:application --host 0.0.0.0 --port 8000 --reload"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app # recarrega ao editar o código
+      - media_data:/data/media
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+    environment:
+      API_PROXY_TARGET: http://backend:8000
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules # mantém o node_modules instalado na imagem
+
 volumes:
   sqlserver_data:
+  media_data:

@@ -11,6 +11,7 @@ export default defineConfig({
   define: { __MEDIAPIPE_VERSION__: JSON.stringify(mediapipeVersion) },
   server: {
     port: 5173,
-    proxy: { '/api': 'http://localhost:8000' },
+    // No Docker, o backend é o serviço "backend" da rede do compose.
+    proxy: { '/api': process.env.API_PROXY_TARGET ?? 'http://localhost:8000' },
   },
 })
