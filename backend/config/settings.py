@@ -5,7 +5,7 @@ from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR / ".env")
+load_dotenv(BASE_DIR.parent / ".env")  # .env único na raiz do repositório; no Docker as variáveis vêm do compose
 
 DEFAULT_SECRET = "dev-insecure-key-change-me-0123456789abcdef"
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", DEFAULT_SECRET)

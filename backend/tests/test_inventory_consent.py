@@ -234,3 +234,134 @@ def test_seed_migration_creates_model_terms():
     kinds = set(Term.objects.values_list("kind", flat=True))
     assert kinds == {"botox", "preenchimento", "bioestimulador", "skinbooster", "outro", "uso_imagem"}
     assert "RDC" not in "".join(Term.objects.values_list("content", flat=True))
+
+
+# ---- exclusão / anonimização / auditoria de estoque ----
+def applied_patient(client, auth, patient, number="AN1", quantity=50, amount=10):
+    prod = product(client, auth)
+    l = lot(client, auth, prod["id"], number, quantity=quantity).json()
+    plan = plan_with(client, auth, patient, l["id"], amount=amount).json()
+    assert client.post(f"/api/plans/{plan['id']}/apply", headers=auth).status_code == 200
+    return l, plan
+
+
+def test_delete_patient_with_applications_is_409_and_without_still_works(client, auth, patient):
+    from apps.inventory.models import Application
+
+    applied_patient(client, auth, patient)
+    r = client.delete(f"/api/patients/{patient['id']}", headers=auth)
+    assert r.status_code == 409 and "anonim" in r.json()["detail"].lower()
+    assert Application.objects.filter(patient_id=patient["id"]).count() == 1
+    assert client.get(f"/api/patients/{patient['id']}", headers=auth).status_code == 200
+
+    free = client.post("/api/patients", json={"full_name": "Sem Aplicacao"}, headers=auth).json()
+    assert client.delete(f"/api/patients/{free['id']}", headers=auth).status_code == 204
+
+
+def test_anonymize_clears_personal_data_keeps_traceability(client, auth, other_auth, questions):
+    from apps.clinical.models import Anamnesis
+    from apps.inventory.models import Application
+    from apps.patients.models import PatientPhoto
+
+    p = client.post(
+        "/api/patients",
+        json={"full_name": "Joana Real", "phone": "11999990000", "email": "joana@x.com", "birth_date": "1990-01-02", "notes": "obs"},
+        headers=auth,
+    ).json()
+    pid = p["id"]
+    photo = client.post(f"/api/patients/{pid}/photos", files={"file": ("a.png", png_bytes(), "image/png")}, headers=auth).json()
+    path = PatientPhoto.objects.get(pk=photo["id"]).image.path
+    import os
+
+    assert os.path.exists(path)
+    client.put(
+        f"/api/patients/{pid}/anamnesis",
+        json={"notes": "texto livre sensivel", "answers": [{"question_id": questions[0].id, "answer": True, "detail": "penicilina"}]},
+        headers=auth,
+    )
+    term = Term.objects.create(kind="botox", version=1, title="T", content="c")
+    sig = client.post(
+        f"/api/patients/{pid}/consents", json={"term_id": term.id, "signer_name": "Joana Real", "signature": signature_data()}, headers=auth
+    ).json()
+    l, plan = applied_patient(client, auth, p, number="ANON")
+
+    assert client.post(f"/api/patients/{pid}/anonymize", headers=other_auth).status_code == 404
+    assert client.post(f"/api/patients/{pid}/anonymize").status_code == 401
+    r = client.post(f"/api/patients/{pid}/anonymize", headers=auth)
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["full_name"].startswith("Paciente anonimizado") and out["anonymized_at"]
+    assert (out["phone"], out["email"], out["notes"], out["birth_date"]) == ("", "", "", None)
+
+    assert PatientPhoto.objects.filter(patient_id=pid).count() == 0 and not os.path.exists(path)
+    # Anamnese, assinaturas e notas do plano ficam: guarda do prontuário ainda em decisão (LGPD x Lei 13.787/2018).
+    assert Anamnesis.objects.filter(patient_id=pid).exists() and Signature.objects.filter(pk=sig["id"]).exists()
+
+    # rastreabilidade preservada, sem nome real
+    assert Application.objects.filter(patient_id=pid).count() == 1
+    trace = client.get(f"/api/patients/{pid}/traceability", headers=auth).json()
+    assert trace["rows"][0]["lot_number"] == "ANON" and trace["patient_name"].startswith("Paciente anonimizado")
+    assert "Joana" not in trace["patient_name"]
+    assert "Joana" not in client.get(f"/api/patients/{pid}/traceability/print", headers=auth).text
+    # ainda não pode excluir
+    assert client.delete(f"/api/patients/{pid}", headers=auth).status_code == 409
+
+
+def test_delete_applied_plan_is_409(client, auth, patient):
+    l, plan = applied_patient(client, auth, patient)
+    assert client.delete(f"/api/plans/{plan['id']}", headers=auth).status_code == 409
+    assert client.get("/api/inventory/lots", headers=auth).json()[0]["balance"] == 40  # saldo intacto
+    assert client.get(f"/api/plans/{plan['id']}", headers=auth).status_code == 200
+    draft = plan_with(client, auth, patient, None).json()
+    assert client.delete(f"/api/plans/{draft['id']}", headers=auth).status_code == 204
+
+
+def test_double_apply_second_is_409_and_deducts_once(client, auth, patient):
+    l, plan = applied_patient(client, auth, patient, quantity=30, amount=10)
+    assert client.post(f"/api/plans/{plan['id']}/apply", headers=auth).status_code == 409
+    assert client.get("/api/inventory/lots", headers=auth).json()[0]["balance"] == 20
+
+
+def test_consent_and_printables_idor(client, auth, other_auth, patient, terms):
+    pid = patient["id"]
+    sid = client.post(
+        f"/api/patients/{pid}/consents",
+        json={"term_id": terms["img"].id, "signer_name": "Maria", "signature": signature_data()},
+        headers=auth,
+    ).json()["id"]
+    for method, url in [
+        ("get", f"/api/consents/{sid}/signature"),
+        ("get", f"/api/consents/{sid}/document"),
+        ("post", f"/api/consents/{sid}/revoke"),
+        ("get", f"/api/patients/{pid}/traceability/print"),
+        ("get", f"/api/patients/{pid}/traceability"),
+        ("get", f"/api/patients/{pid}/consents"),
+    ]:
+        assert getattr(client, method)(url, headers=other_auth).status_code == 404, url
+        assert getattr(client, method)(url).status_code == 401, url
+    assert Signature.objects.get(pk=sid).revoked_at is None  # revogação alheia não surtiu efeito
+
+
+def test_lot_movements_log(client, auth, other_auth, patient):
+    prod = product(client, auth)
+    l = lot(client, auth, prod["id"], "M1", quantity=30).json()
+    url = f"/api/inventory/lots/{l['id']}/movements"
+
+    # ajuste de saldo exige motivo
+    assert client.patch(f"/api/inventory/lots/{l['id']}", json={"balance": 25}, headers=auth).status_code == 422
+    assert client.patch(f"/api/inventory/lots/{l['id']}", json={"balance": 25, "reason": "  "}, headers=auth).status_code == 422
+    ok = client.patch(f"/api/inventory/lots/{l['id']}", json={"balance": 25, "reason": "Frasco quebrado"}, headers=auth)
+    assert ok.status_code == 200 and ok.json()["balance"] == 25
+    # trocar só o número não exige motivo nem gera movimento
+    assert client.patch(f"/api/inventory/lots/{l['id']}", json={"number": "M1b"}, headers=auth).status_code == 200
+
+    plan = plan_with(client, auth, patient, l["id"], amount=10).json()
+    assert client.post(f"/api/plans/{plan['id']}/apply", headers=auth).status_code == 200
+
+    moves = client.get(url, headers=auth).json()
+    assert [(m["kind"], m["delta"], m["balance_after"]) for m in reversed(moves)] == [
+        ("entrada", 30, 30), ("ajuste", -5, 25), ("baixa", -10, 15),
+    ]
+    assert moves[1]["reason"] == "Frasco quebrado" and moves[1]["author"] == "Ana Souza"
+    assert client.get(url, headers=other_auth).status_code == 404
+    assert client.get(url).status_code == 401

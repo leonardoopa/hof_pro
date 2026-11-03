@@ -14,10 +14,11 @@ RUN apt-get update \
 
 WORKDIR /app
 
+# O contexto do build é a raiz do repositório: requirements.txt único lá, código em backend/.
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY backend/ .
 
 EXPOSE 8000
 CMD ["sh", "-c", "python manage.py ensure_db && python manage.py migrate && uvicorn config.asgi:application --host 0.0.0.0 --port 8000"]
