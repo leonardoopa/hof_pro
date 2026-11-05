@@ -47,6 +47,17 @@ class Region(models.TextChoices):
     JAW = "mandibula", "Mandíbula"
     CHIN = "mento", "Mento"
     LIPS = "boca", "Boca"
+    GLABELLA = "glabela", "Glabela"
+    PERIORBITAL = "periorbital", "Periorbital (pés de galinha)"
+    NOSE = "nariz", "Nariz"
+    ZYGOMATIC = "zigomatico", "Zigomático"
+    SUBMALAR = "submalar", "Submalar"
+    GUMMY_SMILE = "gengival", "Sorriso gengival (LLSAN)"
+    MARIONETTE = "marionete", "Marionete"
+    DAO = "dao", "DAO (depressor do ângulo da boca)"
+    PREJOWL = "prejowl", "Pré-jowl"
+    MASSETER = "masseter", "Masseter"
+    PLATYSMA = "platisma", "Platisma (pescoço)"
 
 
 class Treatment(models.TextChoices):
@@ -126,3 +137,5 @@ class PlanPoint(models.Model):
     technique = models.CharField(max_length=20, choices=Technique.choices, blank=True, default="")
     depth = models.CharField(max_length=20, choices=Depth.choices, blank=True, default="")
     lot = models.ForeignKey("inventory.Lot", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    # Nome do ponto no catálogo do modelo; "" = ponto adicionado à mão ou plano salvo antes deste campo.
+    point_key = models.CharField(max_length=40, blank=True, default="")

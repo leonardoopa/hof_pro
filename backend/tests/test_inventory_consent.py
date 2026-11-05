@@ -81,7 +81,9 @@ def test_plan_rejects_expired_foreign_and_wrong_unit_lot(client, auth, other_aut
 def test_apply_deducts_balance_and_traceability(client, auth, other_auth, patient):
     prod = product(client, auth)
     l1 = lot(client, auth, prod["id"], "A1", quantity=25).json()
-    plan = plan_with(client, auth, patient, l1["id"], amount=10, technique="bolus", depth="intramuscular").json()
+    plan = plan_with(
+        client, auth, patient, l1["id"], amount=10, technique="bolus", depth="intramuscular", region="platisma"
+    ).json()
     assert client.get(f"/api/inventory/lots?product_id={prod['id']}", headers=auth).json()[0]["balance"] == 25  # salvar não baixa
 
     assert client.post(f"/api/plans/{plan['id']}/apply", headers=other_auth).status_code == 404
@@ -98,6 +100,7 @@ def test_apply_deducts_balance_and_traceability(client, auth, other_auth, patien
     assert client.get(f"/api/patients/{patient['id']}/traceability", headers=other_auth).status_code == 404
     html = client.get(f"/api/patients/{patient['id']}/traceability/print", headers=auth)
     assert html.status_code == 200 and "A1" in html.text and "Maria Paciente" in html.text
+    assert "Platisma (pescoço)" in html.text  # rótulo de região nova no impresso
     assert client.get(f"/api/patients/{patient['id']}/traceability/print").status_code == 401
     assert client.delete(f"/api/inventory/lots/{l1['id']}", headers=auth).status_code == 409  # já aplicado
 

@@ -1,5 +1,9 @@
+from typing import get_args
+
 import pytest
 
+from api.schemas import RegionKey
+from apps.clinical.models import Region
 from tests.conftest import png_bytes, register
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -127,10 +131,36 @@ def test_plan_totals_units_and_validation(client, auth, other_auth, patient):
 
     bad_xy = {"points": [{"region": "testa", "treatment": "botox", "x": 1.5, "y": 0.2, "amount": 1}]}
     assert client.post(f"/api/patients/{pid}/plans", json=bad_xy, headers=auth).status_code == 422
-    bad_region = {"points": [{"region": "nariz", "treatment": "botox", "x": 0.5, "y": 0.2, "amount": 1}]}
+    bad_region = {"points": [{"region": "orelha", "treatment": "botox", "x": 0.5, "y": 0.2, "amount": 1}]}
     assert client.post(f"/api/patients/{pid}/plans", json=bad_region, headers=auth).status_code == 422
     negative = {"points": [{"region": "testa", "treatment": "botox", "x": 0.5, "y": 0.2, "amount": -1}]}
     assert client.post(f"/api/patients/{pid}/plans", json=negative, headers=auth).status_code == 422
+
+
+def test_plan_new_regions_and_point_key(client, auth, patient):
+    url = f"/api/patients/{patient['id']}/plans"
+    body = {
+        "points": [
+            {"region": "glabela", "treatment": "botox", "x": 0.5, "y": 0.25, "amount": 4, "point_key": "procero"},
+            {"region": "masseter", "treatment": "botox", "x": 0.2, "y": 0.7, "amount": 10, "point_key": "inferior_anterior"},
+            {"region": "platisma", "treatment": "botox", "x": 0.3, "y": 0.9, "amount": 2},  # sem point_key
+        ]
+    }
+    created = client.post(url, json=body, headers=auth)
+    assert created.status_code == 201, created.text
+    loaded = client.get(f"/api/plans/{created.json()['id']}", headers=auth).json()
+    assert {p["region"]: p["point_key"] for p in loaded["points"]} == {
+        "glabela": "procero", "masseter": "inferior_anterior", "platisma": ""
+    }
+
+    for bad in ("Prócero!", "a" * 41):
+        point = {"region": "glabela", "treatment": "botox", "x": 0.5, "y": 0.25, "amount": 4, "point_key": bad}
+        assert client.post(url, json={"points": [point]}, headers=auth).status_code == 422
+
+
+def test_region_key_matches_model_choices():
+    # As duas listas de regiões (API e modelo) não podem divergir.
+    assert sorted(get_args(RegionKey)) == sorted(Region.values)
 
 
 def test_plan_photo_must_belong_to_patient(client, auth, patient):
