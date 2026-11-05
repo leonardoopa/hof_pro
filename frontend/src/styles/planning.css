@@ -184,7 +184,8 @@
   align-items: flex-start;
   transform: none;
 }
-.hotspot.filled .hotspot-label,
+/* rótulo fixo só nas regiões preenchidas que cabem sem cobrir outro (layout.js); os demais, no hover/foco */
+.hotspot.show-label .hotspot-label,
 .hotspot.hover .hotspot-label,
 .hotspot:hover .hotspot-label,
 .hotspot:focus-visible .hotspot-label {

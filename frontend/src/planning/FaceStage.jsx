@@ -1,5 +1,6 @@
-import { useRef } from 'react'
-import { REGIONS, SIDE_LABEL, describeTotals, regionLabel, totalsOf, treatmentOf, formatAmount } from './regions'
+import { useEffect, useRef, useState } from 'react'
+import { fitLabels, spreadHotspots } from './layout'
+import { REGIONS, SIDE_LABEL, describeTotals, pointLabel, regionLabel, totalsOf, treatmentOf, formatAmount } from './regions'
 
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n))
 
@@ -51,6 +52,15 @@ export default function FaceStage({
   const dragging = useRef(null)
   const { s, tx, ty } = viewFor(points, zone)
 
+  // Tamanho do palco em px: o layout dos hotspots mede distâncias na tela, não na foto.
+  const stageRef = useRef(null)
+  const [size, setSize] = useState({ width: 0, height: 0 })
+  useEffect(() => {
+    const observer = new ResizeObserver(([entry]) => setSize({ width: entry.contentRect.width, height: entry.contentRect.height }))
+    observer.observe(stageRef.current)
+    return () => observer.disconnect()
+  }, [])
+
   const toNormalized = (e) => {
     const rect = innerRef.current.getBoundingClientRect() // já inclui o zoom aplicado via transform
     return {
@@ -63,8 +73,32 @@ export default function FaceStage({
   const marks = showMarks ? points : []
   const zonePoints = zone ? marks.filter((p) => inZone(p, zone)) : []
 
+  // Visão geral: um hotspot por região e lado, afastados para não se sobreporem; rótulo fixo só onde cabe.
+  const groups = zone
+    ? []
+    : REGIONS.flatMap((region) =>
+        ['D', 'E', 'C']
+          .map((side) => ({ region, side, pts: marks.filter((p) => p.region === region.key && p.side === side) }))
+          .filter((g) => g.pts.length),
+      ).map((g) => {
+        const short = g.region.short ?? g.region.label
+        // na foto: D/E, lado do paciente
+        return { ...g, ...centroid(g.pts), total: totalsOf(g.pts), shortName: g.side === 'C' ? short : `${short} ${g.side}` }
+      })
+  const spots = spreadHotspots(groups, size)
+  const showLabel = fitLabels(
+    groups.map((g, i) => ({
+      ...spots[i],
+      side: g.side,
+      lines: g.total.areas ? [g.shortName, describeTotals(g.total)] : [g.shortName],
+      want: g.total.areas > 0,
+    })),
+    size,
+  )
+
   return (
     <div
+      ref={stageRef}
       className={`stage ${adding ? 'adding' : ''}`}
       style={{ '--aspect': aspect }}
       onClick={(e) => {
@@ -100,34 +134,26 @@ export default function FaceStage({
               />
             ))}
 
-        {!zone &&
-          REGIONS.flatMap(({ key, label }) =>
-            ['D', 'E', 'C']
-              .map((side) => ({ key, label, side, pts: marks.filter((p) => p.region === key && p.side === side) }))
-              .filter((g) => g.pts.length),
-          ).map(({ key, label, side, pts }) => {
-            const c = centroid(pts)
-            const total = totalsOf(pts)
-            const name = side === 'C' ? label : `${label} (${SIDE_LABEL[side].toLowerCase()})`
-            const shortName = side === 'C' ? label : `${label} ${side}` // na foto: D/E, lado do paciente
-            return (
-              <button
-                key={`${key}-${side}`}
-                type="button"
-                className={`hotspot side-${side} ${hoverRegion === key ? 'hover' : ''} ${total.areas ? 'filled' : ''} ${suggested.includes(key) ? 'suggest' : ''}`}
-                style={{ left: `${c.x * 100}%`, top: `${c.y * 100}%` }}
-                onClick={() => onPickRegion(key, side)}
-                onMouseEnter={() => onHoverRegion(key)}
-                onMouseLeave={() => onHoverRegion(null)}
-                aria-label={`${name}: ${describeTotals(total)}. Abrir região`}
-              >
-                <span className="hotspot-label">
-                  {shortName}
-                  {total.areas > 0 && <b>{describeTotals(total)}</b>}
-                </span>
-              </button>
-            )
-          })}
+        {groups.map(({ region: { key, label }, side, total, shortName }, i) => {
+          const name = side === 'C' ? label : `${label} (${SIDE_LABEL[side].toLowerCase()})`
+          return (
+            <button
+              key={`${key}-${side}`}
+              type="button"
+              className={`hotspot side-${side} ${hoverRegion === key ? 'hover' : ''} ${total.areas ? 'filled' : ''} ${showLabel[i] ? 'show-label' : ''} ${suggested.includes(key) ? 'suggest' : ''}`}
+              style={{ left: `${spots[i].x * 100}%`, top: `${spots[i].y * 100}%` }}
+              onClick={() => onPickRegion(key, side)}
+              onMouseEnter={() => onHoverRegion(key)}
+              onMouseLeave={() => onHoverRegion(null)}
+              aria-label={`${name}: ${describeTotals(total)}. Abrir região`}
+            >
+              <span className="hotspot-label">
+                {shortName}
+                {total.areas > 0 && <b>{describeTotals(total)}</b>}
+              </span>
+            </button>
+          )
+        })}
 
         {zone &&
           marks
@@ -146,7 +172,8 @@ export default function FaceStage({
             type="button"
             className={`pt ${p.amount > 0 ? 'on' : ''} ${selectedId === p.uid ? 'selected' : ''}`}
             style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%`, '--c': treatmentOf(p.treatment).color }}
-            aria-label={`${regionLabel(p.region)} ponto ${index + 1}: ${formatAmount(p.amount)} ${treatmentOf(p.treatment).unit}`}
+            title={pointLabel(p.region, p.point_key) || undefined}
+            aria-label={`${regionLabel(p.region)}, ${pointLabel(p.region, p.point_key) || `ponto ${index + 1}`}: ${formatAmount(p.amount)} ${treatmentOf(p.treatment).unit}`}
             onPointerDown={(e) => {
               e.currentTarget.setPointerCapture(e.pointerId)
               dragging.current = p.uid
