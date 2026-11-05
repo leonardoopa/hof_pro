@@ -59,6 +59,7 @@ def _replace_points(plan: FacialPlan, points) -> None:
             technique=p.technique,
             depth=p.depth,
             lot_id=p.lot_id,
+            point_key=p.point_key,
             unit=UNIT_BY_TREATMENT[p.treatment],
         )
         for p in points

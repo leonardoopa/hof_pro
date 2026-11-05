@@ -7,7 +7,11 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, PlainSerializer
 # Decimal no banco; número JSON na resposta.
 Amount = Annotated[Decimal, PlainSerializer(float, return_type=float, when_used="json")]
 
-RegionKey = Literal["testa", "temporas", "olheiras", "malar", "nasolabial", "mandibula", "mento", "boca"]
+RegionKey = Literal[
+    "testa", "temporas", "olheiras", "malar", "nasolabial", "mandibula", "mento", "boca",
+    "glabela", "periorbital", "nariz", "zigomatico", "submalar", "gengival",
+    "marionete", "dao", "prejowl", "masseter", "platisma",
+]
 TreatmentKey = Literal["botox", "preenchimento", "bioestimulador", "skinbooster", "outro"]
 TechniqueKey = Literal["bolus", "retroinjecao", "leque", "canula", "microgotas", "papula", "outra", ""]
 DepthKey = Literal["intradermico", "subdermico", "subcutaneo", "supraperiosteal", "intramuscular", ""]
@@ -123,6 +127,7 @@ class PointIn(BaseModel):
     technique: TechniqueKey = ""
     depth: DepthKey = ""
     lot_id: int | None = None
+    point_key: str = Field(default="", max_length=40, pattern=r"^[a-z0-9_]*$")
 
 
 class PlanIn(BaseModel):
@@ -143,6 +148,7 @@ class PointOut(ORM):
     technique: str
     depth: str
     lot_id: int | None
+    point_key: str
 
 
 class PlanTotals(BaseModel):
