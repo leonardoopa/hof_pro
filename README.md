@@ -65,7 +65,13 @@ Testes (SQLite, não precisam de SQL Server): `cd backend && ../.venv/bin/python
 - **Anamnese**: 15 perguntas sim/não semeadas por migration (editáveis no admin Django). "Sim" exige descrição.
 - **Planejamento facial**:
   - foto frontal pela câmera ou por upload;
-  - o MediaPipe detecta o rosto no navegador e posiciona os pontos sugeridos (testa, têmporas, olheiras, malar, nasolabial, mandíbula, mento, dos dois lados);
+  - o MediaPipe detecta o rosto no navegador e posiciona os pontos sugeridos em 19 regiões:
+    - terço superior: testa, glabela, têmporas, periorbital (pés de galinha);
+    - terço médio: olheiras, nariz (inclui bunny lines), zigomático, malar, submalar, nasolabial, sorriso gengival (LLSAN);
+    - terço inferior: boca, marionete, DAO, mento (inclui mentual), pré-jowl, mandíbula, masseter;
+    - pescoço: platisma;
+  - cada ponto sugerido tem nome anatômico (ex.: prócero, corrugador medial, arco do cupido), salvo no plano; a região mostra um alerta de risco quando o estudo em `docs/IMPLEMENTACAO-FOTO-PONTOS-ANTES-DEPOIS.md` tem fonte para ele. Doses de referência não aparecem até serem validadas por profissional;
+  - planos salvos antes de uma região existir ganham os pontos dela (quantidade 0) ao abrir;
   - tocar numa região dá zoom e mostra os pontos; cada ponto tem produto e quantidade, pode ser arrastado, removido ou adicionado;
   - resumo ao vivo: total de ml (preenchimentos), unidades (toxina) e número de áreas;
   - **Simular resultado**: comparação antes/depois ilustrativa (suavização para toxina, volume local para preenchedores).
