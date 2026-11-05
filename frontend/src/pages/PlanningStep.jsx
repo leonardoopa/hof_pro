@@ -1,4 +1,4 @@
-import { Camera, CheckCheck, ChevronLeft, Crosshair, Eye, EyeOff, Minus, Plus, Save, ScanFace, Sparkles, Trash2, Upload } from 'lucide-react'
+import { AlertTriangle, Camera, CheckCheck, ChevronLeft, Crosshair, Eye, EyeOff, Minus, Plus, Save, ScanFace, Sparkles, Trash2, Upload } from 'lucide-react'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useOutletContext } from 'react-router-dom'
 import { api } from '../api/client'
@@ -10,13 +10,16 @@ import { detectFace } from '../planning/faceLandmarks'
 import FaceStage from '../planning/FaceStage'
 import {
   BILATERAL,
+  GROUPS,
   REGIONS,
   SIDE_LABEL,
   TREATMENTS,
   assignSides,
   describeTotals,
   formatAmount,
+  pointLabel,
   regionLabel,
+  regionOf,
   round2,
   totalsOf,
   treatmentOf,
@@ -113,6 +116,27 @@ export default function PlanningStep() {
     setPoints(template.map((t) => withUid({ ...t, treatment: 'preenchimento', amount: 0 })))
   }, [getLandmarks])
 
+  // Planos salvos antes de uma região existir: acrescenta os pontos do modelo dessa região (quantidade 0),
+  // posicionados pelo rosto da foto. Não conta como alteração do plano.
+  const fillMissingRegions = useCallback(async (img, loaded, token) => {
+    const missing = new Set(REGIONS.map((r) => r.key).filter((key) => !loaded.some((p) => p.region === key)))
+    if (!missing.size) return
+    let template
+    try {
+      const landmarks = await getLandmarks(img)
+      template = landmarks ? buildTemplate(landmarks, img.naturalWidth, img.naturalHeight) : fallbackTemplate()
+    } catch {
+      template = fallbackTemplate()
+    }
+    if (token !== placeToken.current) return
+    setPoints((ps) => [
+      ...ps,
+      ...template
+        .filter((t) => missing.has(t.region) && !ps.some((p) => p.region === t.region))
+        .map((t) => withUid({ ...t, treatment: 'preenchimento', amount: 0 })),
+    ])
+  }, [getLandmarks])
+
   const showPhoto = useCallback(
     async (meta, savedPoints) => {
       const url = await api.photos.objectUrl(meta.id)
@@ -122,23 +146,30 @@ export default function PlanningStep() {
       setPhoto(meta)
       setImage(img)
       if (savedPoints?.length) {
-        placeToken.current++
+        const token = ++placeToken.current
         const loaded = assignSides(
           savedPoints.map((p) =>
-            withUid({ region: p.region, treatment: p.treatment, x: p.x, y: p.y, amount: p.amount, technique: p.technique, depth: p.depth, lot_id: p.lot_id }),
+            withUid({
+              region: p.region,
+              point_key: p.point_key ?? '',
+              treatment: p.treatment,
+              x: p.x,
+              y: p.y,
+              amount: p.amount,
+              technique: p.technique,
+              depth: p.depth,
+              lot_id: p.lot_id,
+            }),
           ),
         )
-        // Planos salvos antes da região "boca" existir: sugere os pontos padrão (quantidade 0), ajustáveis.
-        if (!loaded.some((p) => p.region === 'boca')) {
-          loaded.push(...fallbackTemplate().filter((t) => t.region === 'boca').map((t) => withUid({ ...t, treatment: 'preenchimento', amount: 0 })))
-        }
         setPoints(loaded)
         setDetect('idle')
+        fillMissingRegions(img, loaded, token)
       } else {
         placeAutomatically(img) // em segundo plano: a foto já aparece enquanto o modelo carrega
       }
     },
-    [placeAutomatically],
+    [placeAutomatically, fillMissingRegions],
   )
 
   useEffect(() => {
@@ -246,7 +277,7 @@ export default function PlanningStep() {
 
   function addPoint(x, y) {
     const t = treatmentOf(treatment)
-    const point = withUid({ region: zone.region, side: zone.side, x, y, treatment: t.key, amount: t.initial })
+    const point = withUid({ region: zone.region, side: zone.side, point_key: '', x, y, treatment: t.key, amount: t.initial })
     edit((ps) => [...ps, point])
     setSelected(point.uid)
     setAdding(false)
@@ -315,8 +346,9 @@ export default function PlanningStep() {
       photo_id: photo?.id ?? null,
       title: plan?.title ?? '',
       notes,
-      points: points.map(({ region, treatment: t, x, y, amount, technique, depth, lot_id }) => ({
+      points: points.map(({ region, point_key, treatment: t, x, y, amount, technique, depth, lot_id }) => ({
         region,
+        point_key: point_key ?? '',
         treatment: t,
         x: round4(x),
         y: round4(y),
@@ -572,22 +604,27 @@ export default function PlanningStep() {
               <>
                 <div className="card-title">Regiões</div>
                 <div className="region-list">
-                  {REGIONS.map(({ key, label }) => {
-                    const total = totalsOf(points.filter((p) => p.region === key))
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        className={`region-row ${hoverRegion === key ? 'hover' : ''} ${suggested.includes(key) ? 'suggest' : ''}`}
-                        onClick={() => openRegion(key)}
-                        onMouseEnter={() => setHoverRegion(key)}
-                        onMouseLeave={() => setHoverRegion(null)}
-                      >
-                        <span>{label}</span>
-                        <b className={total.areas ? '' : 'muted'}>{describeTotals(total)}</b>
-                      </button>
-                    )
-                  })}
+                  {GROUPS.map((group) => (
+                    <Fragment key={group.key}>
+                      <span className="region-group">{group.label}</span>
+                      {REGIONS.filter((r) => r.group === group.key).map(({ key, label }) => {
+                        const total = totalsOf(points.filter((p) => p.region === key))
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            className={`region-row ${hoverRegion === key ? 'hover' : ''} ${suggested.includes(key) ? 'suggest' : ''}`}
+                            onClick={() => openRegion(key)}
+                            onMouseEnter={() => setHoverRegion(key)}
+                            onMouseLeave={() => setHoverRegion(null)}
+                          >
+                            <span>{label}</span>
+                            <b className={total.areas ? '' : 'muted'}>{describeTotals(total)}</b>
+                          </button>
+                        )
+                      })}
+                    </Fragment>
+                  ))}
                 </div>
               </>
             ) : (
@@ -597,12 +634,19 @@ export default function PlanningStep() {
                   {SIDE_LABEL[zone.side] && ` · ${SIDE_LABEL[zone.side]}`}
                   <span className="sub">{describeTotals(totalsOf(zonePoints))}</span>
                 </div>
+                {regionOf(zone.region)?.risk && (
+                  <p className="risk-note">
+                    <AlertTriangle size={14} /> {regionOf(zone.region).risk}
+                  </p>
+                )}
                 <div className="point-list">
                   {zonePoints.map((p, index) => {
                     const t = treatmentOf(p.treatment)
+                    const name = pointLabel(p.region, p.point_key)
                     return (
                       <Fragment key={p.uid}>
                       <div className={`prow ${selected === p.uid ? 'selected' : ''}`} onClick={() => setSelected(p.uid)}>
+                        {name && <span className="pname">{name}</span>}
                         <span className="badge" style={{ '--c': t.color }}>
                           {index + 1}
                         </span>

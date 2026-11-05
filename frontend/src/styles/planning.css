@@ -184,7 +184,8 @@
   align-items: flex-start;
   transform: none;
 }
-.hotspot.filled .hotspot-label,
+/* rótulo fixo só nas regiões preenchidas que cabem sem cobrir outro (layout.js); os demais, no hover/foco */
+.hotspot.show-label .hotspot-label,
 .hotspot.hover .hotspot-label,
 .hotspot:hover .hotspot-label,
 .hotspot:focus-visible .hotspot-label {
@@ -346,6 +347,32 @@
   color: var(--muted);
   font-weight: var(--weight-regular);
 }
+.region-group {
+  padding: var(--space-2) var(--space-3) 2px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.region-group:first-child {
+  padding-top: 0;
+}
+.risk-note {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) 10px;
+  border-radius: var(--radius-xs);
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: 12.5px;
+}
+.risk-note svg {
+  flex: none;
+  margin-top: 2px;
+}
 
 .point-list {
   display: grid;
@@ -398,6 +425,13 @@
 .prow > .icon-btn:last-child {
   grid-row: 1;
   grid-column: 3;
+}
+/* nome anatômico do ponto: primeira linha, ao lado do botão de remover */
+.prow .pname {
+  grid-row: 1;
+  grid-column: 1 / 3;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
 }
 
 /* pontos sempre acima da camada de simulação */
