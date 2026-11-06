@@ -90,6 +90,7 @@ class TraceRow(BaseModel):
     applied_at: datetime
     plan_id: int | None
     region: str
+    point_key: str
     treatment: str
     technique: str
     depth: str

@@ -714,6 +714,7 @@ export default function PlanningStep() {
                           ))}
                         </select>
                         <div className="amount">
+                          <span className="amount-name">Quantidade</span>
                           <button className="icon-btn" onClick={() => stepAmount(p.uid, -1)} disabled={p.amount <= 0} aria-label="Diminuir">
                             <Minus size={14} />
                           </button>

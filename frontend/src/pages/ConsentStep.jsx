@@ -7,6 +7,7 @@ import ErrorList from '../components/ErrorList'
 import Modal from '../components/Modal'
 import SignaturePad from '../components/SignaturePad'
 import { useToast } from '../components/Toast'
+import { formatAmount, pointLabel, regionLabel } from '../planning/regions'
 import { fmtDate } from '../planning/technique'
 
 const fmtDateTime = (iso) => new Date(iso).toLocaleString('pt-BR')
@@ -228,13 +229,15 @@ export default function ConsentStep() {
               {trace.rows.map((r) => (
                 <tr key={r.id}>
                   <td>{fmtDateTime(r.applied_at)}</td>
-                  <td>{r.region}</td>
+                  <td>
+                    {regionLabel(r.region)} <small>{pointLabel(r.region, r.point_key)}</small>
+                  </td>
                   <td>{r.product}</td>
                   <td>
                     {r.lot_number} <small>val. {fmtDate(r.lot_expires_on)}</small>
                   </td>
                   <td>
-                    {r.amount} {r.unit}
+                    {formatAmount(r.amount)} {r.unit}
                   </td>
                 </tr>
               ))}

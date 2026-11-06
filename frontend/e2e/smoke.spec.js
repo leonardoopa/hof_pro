@@ -81,6 +81,18 @@ test('termo de uso de imagem: assinado desenhando no canvas e depois revogado', 
   expect(errors).toEqual([])
 })
 
+test('prontuário: rastreabilidade mostra a região e o nome do ponto', async ({ page }) => {
+  const errors = collectPageErrors(page)
+  const api = await signIn(page)
+  const patient = await createPatient(api)
+  await appliedPlan(api, patient, page)
+  await page.goto(`/pacientes/${patient.id}/prontuario`)
+  const row = page.locator('tr').filter({ hasText: 'L-SMOKE' })
+  await expect(row.locator('td').nth(1)).toHaveText('Malar Malar lateral')
+  await expect(row.locator('td').last()).toHaveText('0,5 ml')
+  expect(errors).toEqual([])
+})
+
 test('evolução: com duas fotos abre a comparação antes e depois', async ({ page }) => {
   const errors = collectPageErrors(page)
   await blockFaceDetection(page)

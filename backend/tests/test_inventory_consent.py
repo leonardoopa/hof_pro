@@ -78,6 +78,48 @@ def test_plan_rejects_expired_foreign_and_wrong_unit_lot(client, auth, other_aut
     assert plan_with(client, auth, patient, 99999).status_code == 422
 
 
+def test_traceability_names_the_point_and_shows_quantity(client, auth, patient):
+    prod = product(client, auth)
+    l1 = lot(client, auth, prod["id"], "A1", quantity=25).json()
+    body = {
+        "points": [
+            {"region": "glabela", "point_key": "procero", "treatment": "botox", "x": 0.5, "y": 0.3, "amount": 2.5, "lot_id": l1["id"]},
+            {"region": "testa", "treatment": "botox", "x": 0.5, "y": 0.2, "amount": 4, "lot_id": l1["id"]},
+        ]
+    }
+    plan = client.post(f"/api/patients/{patient['id']}/plans", json=body, headers=auth).json()
+    assert client.post(f"/api/plans/{plan['id']}/apply", headers=auth).status_code == 200
+
+    rows = client.get(f"/api/patients/{patient['id']}/traceability", headers=auth).json()["rows"]
+    assert {r["region"]: r["point_key"] for r in rows} == {"glabela": "procero", "testa": ""}
+    html = client.get(f"/api/patients/{patient['id']}/traceability/print", headers=auth).text
+    assert "<small>Prócero</small>" in html
+    assert "<small></small>" not in html  # ponto sem nome não deixa linha vazia
+    assert "2,5 U" in html
+
+
+def test_point_key_backfill_copies_from_the_plan_point(client, auth, patient):
+    from importlib import import_module
+
+    from django.apps import apps
+
+    from apps.inventory.models import Application
+
+    prod = product(client, auth)
+    l1 = lot(client, auth, prod["id"], "A1", quantity=25).json()
+    plan = plan_with(client, auth, patient, l1["id"], amount=2, region="glabela", point_key="procero").json()
+    assert client.post(f"/api/plans/{plan['id']}/apply", headers=auth).status_code == 200
+    Application.objects.update(point_key="")  # como ficou quem aplicou antes da migration
+
+    backfill = import_module("apps.inventory.migrations.0003_application_point_key").copy_point_keys
+    backfill(apps, None)
+    assert Application.objects.get().point_key == "procero"
+
+    Application.objects.update(point_key="ja_tinha")  # rodar de novo não sobrescreve
+    backfill(apps, None)
+    assert Application.objects.get().point_key == "ja_tinha"
+
+
 def test_apply_deducts_balance_and_traceability(client, auth, other_auth, patient):
     prod = product(client, auth)
     l1 = lot(client, auth, prod["id"], "A1", quantity=25).json()

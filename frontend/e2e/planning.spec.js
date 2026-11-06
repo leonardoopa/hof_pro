@@ -67,6 +67,17 @@ const everyRegionFilled = () =>
     amount: i % 2 ? 2 : 0.5,
   }))
 
+/** Modelo inteiro salvo, com quantidade só nas regiões pedidas. */
+const planWithAmountsIn = (...regions) =>
+  fallbackTemplate().map(({ region, point_key, x, y }) => ({
+    region,
+    point_key,
+    x,
+    y,
+    treatment: 'preenchimento',
+    amount: regions.includes(region) ? 0.5 : 0,
+  }))
+
 const regionRow = (page, label) => page.locator('.region-row').filter({ has: page.getByText(label, { exact: true }) })
 const summary = (page, label) => page.locator('.summary > div').filter({ hasText: label }).locator('dd')
 const treatmentButton = (page, name) =>
@@ -340,6 +351,7 @@ test.describe('quantidade e simulação ao vivo', () => {
     ['Botox', 'Testa'],
     ['Botox', 'Boca (lábios)'],
     ['Preenchimento', 'Malar'],
+    ['Preenchimento', 'Nasolabial'],
     ['Preenchimento', 'Boca (lábios)'],
     ['Bioestimulador', 'Mandíbula'],
     ['Skinbooster', 'Nariz'],
@@ -475,6 +487,72 @@ test.describe('quantidade e simulação ao vivo', () => {
     expect(appErrors(errors)).toEqual([])
   })
 
+  test('slider no meio mostra o divisor entre antes e depois, inclusive sem os pontos', async ({ page }) => {
+    const { errors } = await openWithPhoto(page)
+    await openRegion(page, 'Testa')
+    await plus(page, 0).click()
+    await expect(page.locator('.sim-layer')).toBeAttached()
+    const divider = page.locator('.sim-divider')
+    await expect(divider, 'em 100 só há o depois').toHaveCount(0)
+
+    const slider = page.getByLabel('Comparar antes e depois')
+    await slider.fill('30')
+    await expect(page.locator('.sim-layer')).toHaveCSS('clip-path', 'inset(0px 0px 0px 70%)')
+    await expect(divider).toBeVisible()
+    await expect(divider).toHaveAttribute('style', /left: 70%/)
+    await page.getByRole('button', { name: 'Ocultar pontos' }).click()
+    await expect(divider).toBeVisible()
+
+    await slider.fill('0')
+    await expect(divider, 'em 0 só há o antes').toHaveCount(0)
+    expect(appErrors(errors)).toEqual([])
+  })
+
+  test('preenchedor no sulco clareia o vinco, sem deformar nem apagar o que está em volta', async ({ page }) => {
+    const { errors, api, patient } = await prepare(page)
+    // Em volta do ponto: vinco fino e pouco escuro, traço branco que acusaria deslocamento e faixa bem escura como a boca.
+    const dataUrl = await page.evaluate(() => {
+      const canvas = document.createElement('canvas')
+      canvas.width = 800
+      canvas.height = 1000
+      const ctx = canvas.getContext('2d')
+      ctx.fillStyle = '#d9b49a'
+      ctx.fillRect(0, 0, 800, 1000)
+      ctx.fillStyle = '#af8770'
+      ctx.fillRect(250, 497, 300, 6)
+      ctx.fillStyle = '#ffffff'
+      ctx.fillRect(424, 440, 4, 45)
+      ctx.fillStyle = '#20120c'
+      ctx.fillRect(364, 515, 12, 40)
+      return canvas.toDataURL('image/jpeg', 0.95)
+    })
+    const file = { name: 'sulco.jpg', mimeType: 'image/jpeg', buffer: Buffer.from(dataUrl.split(',')[1], 'base64') }
+    const photo = await api.upload(`/patients/${patient.id}/photos`, file)
+    await api.post(`/patients/${patient.id}/plans`, {
+      photo_id: photo.id,
+      title: 'Plano E2E',
+      notes: '',
+      points: [{ region: 'nasolabial', point_key: 'sulco', treatment: 'preenchimento', x: 0.5, y: 0.5, amount: 1 }],
+    })
+    await page.goto(planningUrl(patient))
+
+    await expect.poll(() => simDiff(page, { x: 0.5, y: 0.5 }, 0.003), 'o vinco clareia').toBeGreaterThan(8)
+    const white = await simDiff(page, { x: 0.5325, y: 0.4625 }, 0.002)
+    const dark = await simDiff(page, { x: 0.4625, y: 0.535 }, 0.004)
+    measure('sulco: vinco', (await simDiff(page, { x: 0.5, y: 0.5 }, 0.003)).toFixed(2), 'traço branco', white.toFixed(2), 'faixa escura', dark.toFixed(2))
+    expect(white, 'o traço branco não saiu do lugar').toBeLessThan(5)
+    expect(dark, 'a faixa bem escura continua igual').toBeLessThan(8)
+    expect(appErrors(errors)).toEqual([])
+  })
+
+  test('a linha do ponto mostra a quantidade, e nada na tela fala em preço', async ({ page }) => {
+    const { errors } = await openWithPhoto(page)
+    await openRegion(page, 'Testa')
+    await expect(row(page, 0).locator('.amount')).toContainText('Quantidade')
+    await expect(page.locator('.planning')).not.toContainText(/R\$|pre[cç]o/i)
+    expect(appErrors(errors)).toEqual([])
+  })
+
   test('zerar todas as quantidades tira a simulação', async ({ page }) => {
     const { errors } = await openWithPhoto(page)
     await openRegion(page, 'Testa')
@@ -528,6 +606,23 @@ test.describe('ocultar pontos', () => {
     await expect(page.locator('.sim-layer')).toHaveCount(0)
     expect(appErrors(errors)).toEqual([])
   })
+})
+
+test('hotspot vazio é um anel leve e o preenchido um círculo cheio, com a mesma área de toque', async ({ page }) => {
+  const { errors } = await openWithPlan(page, planWithAmountsIn('boca'))
+  const look = (locator) =>
+    locator.evaluate((el) => {
+      const ring = getComputedStyle(el, '::before')
+      return { drawn: parseFloat(ring.width), fill: ring.backgroundColor, animation: getComputedStyle(el).animationName, touch: el.offsetWidth }
+    })
+  const empty = await look(page.locator('.hotspot:not(.filled)').first())
+  const filled = await look(page.locator('.hotspot.filled').first())
+  expect(empty.drawn).toBeLessThan(filled.drawn)
+  expect(empty.fill).not.toBe(filled.fill)
+  expect(empty.animation, 'sem pulsar').toBe('none')
+  expect(empty.touch).toBe(26)
+  expect(filled.touch).toBe(26)
+  expect(appErrors(errors)).toEqual([])
 })
 
 test.describe('edição na região ampliada', () => {
@@ -796,18 +891,7 @@ for (const { width, height } of [
     })
 
     test('plano típico: toda região preenchida tem rótulo legível, sem cobrir outra preenchida', async ({ page }) => {
-      const filled = new Set(['boca', 'glabela', 'malar', 'nasolabial', 'mento'])
-      const { errors } = await openWithPlan(
-        page,
-        fallbackTemplate().map(({ region, point_key, x, y }) => ({
-          region,
-          point_key,
-          x,
-          y,
-          treatment: 'preenchimento',
-          amount: filled.has(region) ? 0.5 : 0,
-        })),
-      )
+      const { errors } = await openWithPlan(page, planWithAmountsIn('boca', 'glabela', 'malar', 'nasolabial', 'mento'))
       await expect(page.locator('.hotspot.filled')).toHaveCount(7)
       if (width > 1000) await expect(page.locator('.hotspot.filled.show-label')).toHaveCount(7)
 

@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse
 
 from apps.accounts.models import User
 from apps.clinical.models import FacialPlan, UNIT_BY_TREATMENT, Depth, Region, Technique, Treatment
+from apps.clinical.point_labels import point_label
 from apps.inventory.models import Application, Lot, LotMovement, Product
 
 from ..deps import current_user, get_patient_or_404
@@ -261,7 +262,7 @@ def apply_plan(plan_id: int, user: User = Depends(current_user)):
             )
             Application.objects.create(
                 patient=plan.patient, plan=plan, point=p, lot=lot, applied_by=user, amount=p.amount, unit=p.unit,
-                region=p.region, treatment=p.treatment, technique=p.technique, depth=p.depth,
+                region=p.region, point_key=p.point_key, treatment=p.treatment, technique=p.technique, depth=p.depth,
             )
             applied += 1
         plan.refresh_from_db(fields=["applied_at"])
@@ -276,12 +277,17 @@ def _label(choices, value: str) -> str:
         return value or "-"
 
 
+def _point_small(row: TraceRow) -> str:
+    label = point_label(row.region, row.point_key)
+    return f"<br><small>{esc(label)}</small>" if label else ""
+
+
 def _trace(user: User, patient_id: int) -> TraceabilityOut:
     patient = get_patient_or_404(user, patient_id)
     apps = patient.applications.select_related("lot__product")
     rows = [
         TraceRow(
-            id=a.id, applied_at=a.applied_at, plan_id=a.plan_id, region=a.region, treatment=a.treatment,
+            id=a.id, applied_at=a.applied_at, plan_id=a.plan_id, region=a.region, point_key=a.point_key, treatment=a.treatment,
             technique=a.technique, depth=a.depth, amount=a.amount, unit=a.unit,
             product=f"{a.lot.product.brand} {a.lot.product.name}", anvisa_registration=a.lot.product.anvisa_registration,
             lot_number=a.lot.number, lot_expires_on=a.lot.expires_on,
@@ -305,11 +311,11 @@ def traceability_print(patient_id: int, user: User = Depends(current_user)):
     rows = "".join(
         "<tr>"
         f"<td>{esc(r.applied_at.astimezone(tz).strftime('%d/%m/%Y %H:%M'))}</td>"
-        f"<td>{esc(_label(Region, r.region))}</td>"
+        f"<td>{esc(_label(Region, r.region))}{_point_small(r)}</td>"
         f"<td>{esc(r.product)}<br><small>Anvisa: {esc(r.anvisa_registration or '-')}</small></td>"
         f"<td>{esc(r.lot_number)}<br><small>val. {esc(r.lot_expires_on.strftime('%d/%m/%Y'))}</small></td>"
         f"<td>{esc(_label(Technique, r.technique))} / {esc(_label(Depth, r.depth))}</td>"
-        f"<td>{esc(f'{r.amount:g}')} {esc(r.unit)}</td>"
+        f"<td>{esc(f'{r.amount.normalize():f}'.replace('.', ','))} {esc(r.unit)}</td>"
         "</tr>"
         for r in data.rows
     ) or '<tr><td colspan="6">Nenhuma aplicação registrada.</td></tr>'

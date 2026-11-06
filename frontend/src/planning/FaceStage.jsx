@@ -125,6 +125,7 @@ export default function FaceStage({
             style={{ clipPath: `inset(0 0 0 ${100 - split}%)` }}
           />
         )}
+        {simUrl && split > 0 && split < 100 && <i className="sim-divider" style={{ left: `${100 - split}%` }} />}
 
         {!zone &&
           marks

@@ -75,7 +75,7 @@ def _plan(user, patient, title, specs, lots, apply_days_ago=None) -> None:
         )
         app = Application.objects.create(
             patient=patient, plan=plan, point=p, lot=lot, applied_by=user, amount=p.amount, unit=p.unit,
-            region=p.region, treatment=p.treatment, technique=p.technique, depth=p.depth,
+            region=p.region, point_key=p.point_key, treatment=p.treatment, technique=p.technique, depth=p.depth,
         )
         Application.objects.filter(pk=app.pk).update(applied_at=when)  # auto_now_add ignora o valor na criação
 
