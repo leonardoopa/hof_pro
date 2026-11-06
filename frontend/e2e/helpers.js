@@ -43,7 +43,8 @@ export function collectPageErrors(page) {
   const errors = []
   page.on('pageerror', (err) => errors.push(`pageerror: ${err.message}`))
   page.on('console', (msg) => {
-    if (msg.type() === 'error') errors.push(`console: ${msg.text()}`)
+    // O runtime do MediaPipe escreve os próprios logs de nível INFO no console.error.
+    if (msg.type() === 'error' && !msg.text().startsWith('INFO: ')) errors.push(`console: ${msg.text()}`)
   })
   return errors
 }
