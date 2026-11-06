@@ -1,25 +1,10 @@
-// Verificação do modelo de pontos (sem runner no projeto): node src/planning/template.check.mjs
+// Verificação do modelo de pontos (sem runner no projeto): npm test
 // Rosto de teste: fixtures/canonical-face.json, os 468 pontos do canonical_face_model.obj do MediaPipe
 // (Apache-2.0) projetados de frente numa imagem 1000x1250, com a linha média em x = 0.5.
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { registerHooks } from 'node:module'
-
-// O Vite resolve import relativo sem extensão ("./regions"); o Node não. Tenta "<spec>.js" quando falha.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    try {
-      return nextResolve(specifier, context)
-    } catch (err) {
-      if (err?.code === 'ERR_MODULE_NOT_FOUND' && /^\.{1,2}\//.test(specifier) && !/\.[cm]?js$/.test(specifier)) {
-        return nextResolve(`${specifier}.js`, context)
-      }
-      throw err
-    }
-  },
-})
-const { BILATERAL, REGIONS } = await import('./regions.js')
-const { buildTemplate, fallbackTemplate } = await import('./template.js')
+import { BILATERAL, REGIONS } from './regions.js'
+import { buildTemplate, fallbackTemplate } from './template.js'
 
 const face = JSON.parse(readFileSync(new URL('./fixtures/canonical-face.json', import.meta.url), 'utf8'))
 const L = (i) => face.landmarks[i]
