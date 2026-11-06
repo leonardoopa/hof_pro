@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import ErrorList from '../components/ErrorList'
 
-const iso = (d) => d.toISOString().slice(0, 10)
+// Dia local em AAAA-MM-DD; toISOString daria o dia seguinte depois das 21h no Brasil.
+const iso = (d) => d.toLocaleDateString('sv-SE')
 const fmtDay = (value) => new Date(value).toLocaleDateString('pt-BR')
 const fmtNum = (value) => Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 2 })
 

@@ -78,7 +78,7 @@ function TermRow({ term, signatures, onSign, onRevoke }) {
       </div>
       <span className="spacer" />
       {valid ? (
-        <span className="chip ok">Assinado em {fmtDate(valid.signed_at.slice(0, 10))}</span>
+        <span className="chip ok">Assinado em {new Date(valid.signed_at).toLocaleDateString('pt-BR')}</span>
       ) : stale ? (
         <span className="chip warn">Assinado na v{stale.version}</span>
       ) : mine.some((s) => s.revoked_at) ? (
