@@ -1,4 +1,4 @@
-import { assignSides } from './regions'
+import { assignSides } from './regions.js'
 
 // Gera os pontos de aplicação sugeridos. Coordenadas de saída normalizadas (0..1) sobre a foto.
 // "D" = lado direito do paciente (esquerda da imagem); "E" = lado esquerdo (direita da imagem).
