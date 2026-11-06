@@ -25,7 +25,7 @@ PATIENTS = ["Ana Exemplo (Demo)", "Bruno Exemplo (Demo)"]
 
 
 def has_demo(user) -> bool:
-    return Patient.objects.filter(owner=user, full_name__endswith=DEMO_TAG).exists()
+    return Patient.objects.filter(owner=user, full_name__endswith=DEMO_TAG, archived_at__isnull=True).exists()
 
 
 def _products(user) -> dict[str, Lot]:
@@ -87,10 +87,10 @@ def seed_demo(user) -> bool:
         return False
     lots = _products(user)
     ana = Patient.objects.create(
-        owner=user, full_name=PATIENTS[0], phone="(00) 00000-0000", notes="Paciente fictícia (Demo). Pode ser excluída."
+        owner=user, full_name=PATIENTS[0], phone="(00) 00000-0000", notes="Paciente fictícia (Demo). Pode ser arquivada."
     )
     bruno = Patient.objects.create(
-        owner=user, full_name=PATIENTS[1], phone="(00) 00000-0001", notes="Paciente fictício (Demo). Pode ser excluído."
+        owner=user, full_name=PATIENTS[1], phone="(00) 00000-0001", notes="Paciente fictício (Demo). Pode ser arquivado."
     )
     for patient in (ana, bruno):
         _anamnesis(patient)

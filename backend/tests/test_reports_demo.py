@@ -90,6 +90,24 @@ def test_returns_excludes_anonymized(client, auth, setup):
     assert client.get("/api/reports/returns", headers=auth).json()["patients"] == []
 
 
+def test_returns_excludes_archived(client, auth, setup):
+    user, lot = setup
+    p = Patient.objects.create(owner=user, full_name="Arquivada")
+    make_app(user, p, lot, 200)
+    assert [r["full_name"] for r in client.get("/api/reports/returns", headers=auth).json()["patients"]] == ["Arquivada"]
+    client.post(f"/api/patients/{p.id}/archive", headers=auth)
+    assert client.get("/api/reports/returns", headers=auth).json()["patients"] == []
+
+
+def test_demo_loads_again_when_only_archived_patients_remain(client, auth):
+    assert client.post("/api/demo", headers=auth).json() == {"created": True}
+    for row in client.get("/api/patients", headers=auth).json():
+        client.post(f"/api/patients/{row['id']}/archive", headers=auth)
+    assert client.post("/api/demo", headers=auth).json() == {"created": True}
+    assert len(client.get("/api/patients", headers=auth).json()) == 2
+    assert len(client.get("/api/patients?archived=true", headers=auth).json()) == 2
+
+
 def test_seed_demo_command_idempotent(client, auth):
     user = User.objects.get(email="ana@clinica.com")
     for _ in range(2):

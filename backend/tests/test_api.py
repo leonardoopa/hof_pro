@@ -48,8 +48,8 @@ def test_patient_crud_and_isolation(client, auth, other_auth, patient):
     found = client.get("/api/patients?q=maria", headers=auth).json()
     assert [p["id"] for p in found] == [pid] and found[0]["anamnesis_done"] is False
 
-    assert client.delete(f"/api/patients/{pid}", headers=other_auth).status_code == 404
-    assert client.delete(f"/api/patients/{pid}", headers=auth).status_code == 204
+    assert client.post(f"/api/patients/{pid}/archive", headers=other_auth).status_code == 404
+    assert client.post(f"/api/patients/{pid}/archive", headers=auth).status_code == 200
 
 
 def test_anamnesis_requires_detail_when_yes(client, auth, patient, questions):

@@ -30,7 +30,7 @@ O compose sobe três serviços: SQL Server, backend (espera o banco, cria o banc
 
 - Primeira subida baixa cerca de 1,5 GB de imagens.
 - Mac Apple Silicon: Docker Desktop > Settings > General > "Use Rosetta for x86_64/amd64 emulation" (a imagem do SQL Server só existe para amd64).
-- Senha do SQL Server (`sa`) e chave do Django têm valores de desenvolvimento. Para trocar, edite `DB_PASSWORD` e `DJANGO_SECRET_KEY` no `.env`. A senha fica gravada no volume na primeira subida; para trocar depois use `docker compose down -v`.
+- Senha do SQL Server (`sa`) e chave do Django têm valores de desenvolvimento. Para trocar, edite `DB_PASSWORD` e `DJANGO_SECRET_KEY` no `.env`. A senha fica gravada no volume na primeira subida; para trocar depois use `docker compose down -v`, que apaga banco e fotos: faça backup antes.
 - O build do backend instala o driver ODBC 18 da Microsoft e aceita a licença dele (`ACCEPT_EULA=Y` no `backend/Dockerfile`).
 - Parar: `docker compose down`. Apagar também banco e fotos: `docker compose down -v`.
 
@@ -65,7 +65,7 @@ Testes:
 ## O que existe
 
 - **Login e cadastro** por e-mail e senha (JWT, 12 h). Cada profissional só enxerga os próprios pacientes.
-- **Pacientes**: lista com busca, cadastro, exclusão.
+- **Pacientes**: lista com busca, cadastro, arquivamento e ocultação de dados. Nada é apagado.
 - **Anamnese**: 15 perguntas sim/não semeadas por migration (editáveis no admin Django). "Sim" exige descrição.
 - **Planejamento facial**:
   - foto frontal pela câmera ou por upload;
@@ -89,6 +89,9 @@ Testes:
 
 ## Decisões e limites
 
+- **Nada se apaga** (decisão do responsável pelo projeto, 2026-11-06). A API não tem rota DELETE, o admin não oferece exclusão e o ORM recusa apagar registro (`apps/audit/retention.py`). Paciente sai da lista por **arquivamento**, com volta. Produto é desativado. Lote lançado errado tem o saldo ajustado com motivo.
+- **Ocultar dados** tira nome, nascimento, contato, observações e fotos das telas e dos documentos, e fecha o planejamento. Tudo fica guardado e "Mostrar dados" devolve. Anamnese, termos assinados (com o nome de quem assinou) e rastreabilidade continuam visíveis. Como o dado continua guardado, isto **não é anonimização para a LGPD**: o sistema não atende um pedido de eliminação feito pelo paciente, e a guarda sem prazo final precisa de validação com assessoria jurídica.
+- Editar ainda sobrescreve o valor anterior: cadastro, anamnese e rascunho de plano não têm histórico. Plano aplicado e assinatura não mudam. Quem tem acesso direto ao banco ou aos arquivos de foto ainda pode apagá-los; backup é tarefa da implantação.
 - "Valor do ml" é a **quantidade** aplicada em cada ponto, sem preço. Orçamentos e recebimentos, quando existirem, ficam no Financeiro.
 - Toxina é dosada em **unidades (U)**; preenchimento, bioestimulador, skinbooster e outro, em **ml**.
 - A simulação é um efeito de imagem no navegador, não um modelo de IA. A IA que simula o tratamento (anotada no esboço) é a próxima etapa e exige um modelo generativo e revisão clínica.

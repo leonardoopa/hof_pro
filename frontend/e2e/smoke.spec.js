@@ -145,6 +145,7 @@ test('estoque: cria produto e lote pela tela', async ({ page }) => {
   await expect(lot).toHaveCount(0)
 
   await expect(page.locator('.inv-table').getByText('L-TELA')).toBeVisible()
+  await expect(page.getByRole('button', { name: /Excluir/ })).toHaveCount(0) // produto se desativa; lote errado se ajusta com motivo
   const [created] = await api.get('/inventory/lots?available=true')
   expect(created).toMatchObject({ number: 'L-TELA', balance: 12.5 })
   expect(errors).toEqual([])
@@ -186,30 +187,89 @@ test('tema: alterna entre claro e escuro e mantém depois de recarregar', async 
   expect(errors).toEqual([])
 })
 
-test('paciente: anonimizar pelo modal de confirmação', async ({ page }) => {
+test('paciente: ocultar dados não apaga, e "Mostrar dados" traz tudo de volta', async ({ page }) => {
   const errors = collectPageErrors(page)
+  await blockFaceDetection(page)
   const api = await signIn(page)
-  const patient = await createPatient(api, 'Nome Para Anonimizar')
-  await page.goto(`/pacientes/${patient.id}/anamnese`)
-  await page.getByRole('button', { name: 'Anonimizar' }).click()
-  await page.getByRole('dialog', { name: 'Anonimizar paciente' }).getByRole('button', { name: 'Anonimizar' }).click()
-  await expect(page.getByRole('button', { name: 'Anonimizar' })).toHaveCount(0)
-  await expect(page.getByText('Nome Para Anonimizar')).toHaveCount(0)
-  const saved = await api.get(`/patients/${patient.id}`)
-  expect(saved.anonymized_at).not.toBeNull()
-  expect(errors).toEqual([])
+  const patient = await createPatient(api, 'Nome Para Ocultar')
+  await page.goto(`/pacientes/${patient.id}/planejamento`)
+  await page.locator('input[type=file]').setInputFiles(await syntheticPhoto(page))
+  await expect(page.locator('.hotspot')).toHaveCount(33)
+
+  await page.getByRole('button', { name: 'Ocultar dados' }).click()
+  await page.getByRole('dialog', { name: 'Ocultar dados do paciente' }).getByRole('button', { name: 'Ocultar dados' }).click()
+  await expect(page.getByRole('heading', { name: 'Planejamento oculto' })).toBeVisible()
+  await expect(page.getByText('Nome Para Ocultar')).toHaveCount(0)
+  await expect(page.locator('.stage')).toHaveCount(0)
+  expect((await api.get(`/patients/${patient.id}`)).anonymized_at).not.toBeNull()
+
+  await page.getByRole('link', { name: 'Evolução' }).click()
+  await expect(page.getByRole('heading', { name: 'Fotos ocultas' })).toBeVisible()
+  await page.getByRole('link', { name: 'Planejamento' }).click()
+  await page.getByRole('button', { name: 'Mostrar dados' }).click()
+  await expect(page.getByRole('heading', { name: 'Nome Para Ocultar' })).toBeVisible()
+  await expect(page.locator('.stage')).toBeVisible()
+  expect((await api.get(`/patients/${patient.id}`)).anonymized_at).toBeNull()
+  expect(errors.filter((line) => !line.includes('net::ERR_FAILED'))).toEqual([])
 })
 
-test('paciente: excluir pelo modal de confirmação volta para a lista', async ({ page }) => {
+test('paciente: "Mostrar dados" com a tela de planejamento aberta mantém o rascunho', async ({ page }) => {
+  const errors = collectPageErrors(page)
+  await blockFaceDetection(page)
+  const api = await signIn(page)
+  const patient = await createPatient(api, 'Nome Com Rascunho')
+  await page.goto(`/pacientes/${patient.id}/planejamento`)
+  await page.locator('input[type=file]').setInputFiles(await syntheticPhoto(page))
+  await expect(page.locator('.hotspot')).toHaveCount(33)
+  const notes = page.getByPlaceholder(/assimetria leve/)
+  await notes.fill('rascunho sem salvar')
+  const reloads = []
+  page.on('request', (request) => {
+    if (request.url().endsWith(`/patients/${patient.id}/photos`)) reloads.push(request.url())
+  })
+
+  await page.getByRole('button', { name: 'Ocultar dados' }).click()
+  await page.getByRole('dialog', { name: 'Ocultar dados do paciente' }).getByRole('button', { name: 'Ocultar dados' }).click()
+  await expect(page.getByRole('heading', { name: 'Planejamento oculto' })).toBeVisible()
+  await page.getByRole('button', { name: 'Mostrar dados' }).click()
+  await expect(page.locator('.hotspot')).toHaveCount(33)
+  // Dois quadros bastam para os efeitos da tela rodarem: recarregar o plano apagaria o rascunho logo depois.
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+  expect(reloads).toEqual([])
+  await expect(notes).toHaveValue('rascunho sem salvar')
+  // A imagem continua carregando depois de ocultar e mostrar: o endereço temporário não foi revogado.
+  const loaded = await page.locator('.stage img').first().evaluate((img) => img.complete && img.naturalWidth > 0)
+  expect(loaded).toBe(true)
+  await page.getByRole('button', { name: 'Salvar plano' }).click()
+  await expect(page.getByText('Plano salvo')).toBeVisible()
+  const [saved] = await api.get(`/patients/${patient.id}/plans`)
+  expect((await api.get(`/plans/${saved.id}`)).notes).toBe('rascunho sem salvar')
+  expect(errors.filter((line) => !line.includes('net::ERR_FAILED'))).toEqual([])
+})
+
+test('paciente: arquivar tira da lista sem apagar, e reativar traz de volta', async ({ page }) => {
   const errors = collectPageErrors(page)
   const api = await signIn(page)
-  const patient = await createPatient(api, 'Nome Para Excluir')
+  const patient = await createPatient(api, 'Nome Para Arquivar')
   await page.goto(`/pacientes/${patient.id}/anamnese`)
-  await page.getByRole('button', { name: 'Excluir' }).click()
-  await page.getByRole('dialog', { name: 'Excluir paciente' }).getByRole('button', { name: 'Excluir' }).click()
+  await page.getByRole('button', { name: 'Arquivar' }).click()
+  await page.getByRole('dialog', { name: 'Arquivar paciente' }).getByRole('button', { name: 'Arquivar' }).click()
   await expect(page).toHaveURL(/\/pacientes$/)
-  await expect(page.getByText('Nome Para Excluir')).toHaveCount(0)
+  await expect(page.getByText('Nome Para Arquivar')).toHaveCount(0)
   expect(await api.get('/patients')).toEqual([])
+
+  await page.getByRole('button', { name: 'Ver arquivados' }).click()
+  await page.getByText('Nome Para Arquivar').click()
+  await expect(page.getByText('Arquivado', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Reativar' }).click()
+  await expect(page.getByRole('button', { name: 'Arquivar' })).toBeVisible()
+  expect((await api.get('/patients')).map((p) => p.id)).toEqual([patient.id])
+
+  await page.goto('/pacientes')
+  await page.getByRole('button', { name: 'Ver arquivados' }).click()
+  await expect(page.getByText('Nenhum paciente arquivado.')).toBeVisible()
+  await page.getByRole('button', { name: 'Ver pacientes ativos' }).click()
+  await expect(page.getByText('Nome Para Arquivar')).toBeVisible()
   expect(errors).toEqual([])
 })
 

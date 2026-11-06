@@ -78,12 +78,14 @@ export const api = {
   me: () => data('/auth/me'),
 
   patients: {
-    list: (q = '') => data(`/patients?q=${encodeURIComponent(q)}`),
+    list: (q = '', archived = false) => data(`/patients?q=${encodeURIComponent(q)}&archived=${archived}`),
     get: (id) => data(`/patients/${id}`),
     create: (body) => data('/patients', { method: 'POST', json: body }),
     update: (id, body) => data(`/patients/${id}`, { method: 'PATCH', json: body }),
-    remove: (id) => request(`/patients/${id}`, { method: 'DELETE' }),
+    archive: (id) => data(`/patients/${id}/archive`, { method: 'POST' }),
+    unarchive: (id) => data(`/patients/${id}/unarchive`, { method: 'POST' }),
     anonymize: (id) => data(`/patients/${id}/anonymize`, { method: 'POST' }),
+    reveal: (id) => data(`/patients/${id}/reveal`, { method: 'POST' }),
   },
 
   photos: {
@@ -125,11 +127,9 @@ export const api = {
     products: () => data('/inventory/products'),
     createProduct: (body) => data('/inventory/products', { method: 'POST', json: body }),
     updateProduct: (id, body) => data(`/inventory/products/${id}`, { method: 'PATCH', json: body }),
-    removeProduct: (id) => request(`/inventory/products/${id}`, { method: 'DELETE' }),
     lots: ({ available = false } = {}) => data(`/inventory/lots?available=${available}`),
     createLot: (body) => data('/inventory/lots', { method: 'POST', json: body }),
     updateLot: (id, body) => data(`/inventory/lots/${id}`, { method: 'PATCH', json: body }),
-    removeLot: (id) => request(`/inventory/lots/${id}`, { method: 'DELETE' }),
     alerts: () => data('/inventory/alerts'),
     traceability: (patientId) => data(`/patients/${patientId}/traceability`),
   },

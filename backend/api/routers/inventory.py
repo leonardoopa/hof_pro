@@ -2,7 +2,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.db import transaction
-from django.db.models import F, ProtectedError
+from django.db.models import F
 from django.utils import timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import HTMLResponse
@@ -117,16 +117,6 @@ def update_product(product_id: int, data: ProductPatch, user: User = Depends(cur
     return product
 
 
-@router.delete("/inventory/products/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
-@orm
-def delete_product(product_id: int, user: User = Depends(current_user)):
-    product = _own_product(user, product_id)
-    try:
-        product.delete()
-    except ProtectedError:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Produto já foi aplicado em pacientes: desative em vez de excluir.")
-
-
 # ---- lotes ----
 @router.get("/inventory/lots", response_model=list[LotOut])
 @orm
@@ -197,16 +187,6 @@ def lot_movements(lot_id: int, user: User = Depends(current_user)):
         )
         for m in lot.movements.select_related("author")
     ]
-
-
-@router.delete("/inventory/lots/{lot_id}", status_code=status.HTTP_204_NO_CONTENT)
-@orm
-def delete_lot(lot_id: int, user: User = Depends(current_user)):
-    lot = _own_lot(user, lot_id)
-    try:
-        lot.delete()
-    except ProtectedError:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Lote já foi aplicado em pacientes e não pode ser excluído.")
 
 
 @router.get("/inventory/alerts", response_model=AlertsOut)

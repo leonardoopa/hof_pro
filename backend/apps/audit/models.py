@@ -12,7 +12,10 @@ class AccessLog(models.Model):
     class Action(models.TextChoices):
         VIEW = "visualizar", "Visualizar"
         ANONYMIZE = "anonimizar", "Anonimizar"
-        DELETE = "excluir", "Excluir"
+        REVEAL = "mostrar", "Mostrar dados"
+        ARCHIVE = "arquivar", "Arquivar"
+        UNARCHIVE = "reativar", "Reativar"
+        DELETE = "excluir", "Excluir"  # só em registros antigos: o sistema não apaga mais nada
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="access_logs")
     action = models.CharField(max_length=20, choices=Action.choices)

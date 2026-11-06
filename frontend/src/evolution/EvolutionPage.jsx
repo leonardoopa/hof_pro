@@ -1,4 +1,4 @@
-import { Camera, Columns2, ImagePlus, ScanFace, Upload } from 'lucide-react'
+import { Camera, Columns2, EyeOff, ImagePlus, ScanFace, Upload } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { api } from '../api/client'
@@ -88,6 +88,7 @@ export default function EvolutionPage() {
   }
 
   useEffect(() => {
+    if (patient.anonymized_at) return
     let alive = true
     setPhotos(null)
     api.photos
@@ -101,7 +102,7 @@ export default function EvolutionPage() {
     return () => {
       alive = false
     }
-  }, [patient.id])
+  }, [patient.id, patient.anonymized_at])
 
   async function upload(file) {
     setBusy(true)
@@ -169,6 +170,15 @@ export default function EvolutionPage() {
     </>
   )
 
+  if (patient.anonymized_at) {
+    return (
+      <div className="empty-state">
+        <EyeOff size={28} />
+        <h2>Fotos ocultas</h2>
+        <p>As fotos continuam guardadas. Use "Mostrar dados" para vê-las.</p>
+      </div>
+    )
+  }
   if (error && !photos) return <ErrorList error={error} />
   if (!photos) return <div className="boot">Carregando…</div>
 
