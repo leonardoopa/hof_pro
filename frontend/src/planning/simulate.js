@@ -1,5 +1,5 @@
 // Pré-visualização ilustrativa feita no navegador. Não é um modelo clínico nem generativo:
-//  - toxina (U): suaviza a pele ao redor do ponto (efeito de relaxamento das linhas);
+//  - toxina (U): suaviza a pele ao redor do ponto (efeito de relaxamento das linhas), sem borrar sobrancelha nem olho;
 //  - produtos em ml: abaulamento local (efeito de volume), limitado para não distorcer o rosto;
 //  - boca: preenchimento/bioestimulador aumenta o volume do lábio (elipse horizontal, leve realce de cor);
 //    toxina/skinbooster suaviza as linhas periorais ("código de barras").
@@ -7,6 +7,9 @@
 import { treatmentOf } from './regions'
 
 const MAX_SIDE = 1200
+
+// Quanto o pixel pode diferir da foto borrada e ainda ser pele (ruga, poro). Acima disso é traço forte e fica nítido.
+const EDGE_LIMIT = 24
 
 // Quanto cada produto "empurra" a pele para fora (fração máxima do deslocamento).
 const VOLUME_GAIN = { preenchimento: 1, bioestimulador: 0.6, skinbooster: 0.3, outro: 0.8 }
@@ -81,6 +84,7 @@ export function renderSimulation(image, points) {
   const toxin = active.filter(isSmoothing)
   if (toxin.length) {
     const blurred = boxBlur(data, w, h, Math.max(3, Math.round(w * 0.01)), 3)
+    const source = Uint8ClampedArray.from(data) // os pontos se somam: a borda é medida sempre na foto original
     for (const p of toxin) {
       const cx = p.x * w
       const cy = p.y * h
@@ -90,8 +94,9 @@ export function renderSimulation(image, points) {
         for (let x = Math.max(0, Math.floor(cx - r)); x < Math.min(w, Math.ceil(cx + r)); x++) {
           const d = Math.hypot(x - cx, y - cy) / r
           if (d >= 1) continue
-          const k = strength * smooth(1 - d)
           const i = (y * w + x) * 4
+          const edge = (Math.abs(source[i] - blurred[i]) + Math.abs(source[i + 1] - blurred[i + 1]) + Math.abs(source[i + 2] - blurred[i + 2])) / 3
+          const k = strength * smooth(1 - d) * Math.max(0, 1 - edge / EDGE_LIMIT)
           for (let c = 0; c < 3; c++) data[i + c] = data[i + c] * (1 - k) + blurred[i + c] * k
         }
       }
