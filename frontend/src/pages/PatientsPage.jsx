@@ -1,4 +1,4 @@
-import { Plus, Search } from 'lucide-react'
+import { Archive, Plus, Search } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
@@ -72,15 +72,16 @@ function NewPatientModal({ onClose, onCreated }) {
 export default function PatientsPage() {
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
+  const [archived, setArchived] = useState(false)
   const [patients, setPatients] = useState(null)
   const [error, setError] = useState(null)
   const [creating, setCreating] = useState(false)
   const [hasProducts, setHasProducts] = useState(false)
 
   const load = useCallback(
-    (q) =>
+    (q, showArchived) =>
       api.patients
-        .list(q)
+        .list(q, showArchived)
         .then((rows) => {
           setPatients(rows)
           setError(null)
@@ -94,9 +95,9 @@ export default function PatientsPage() {
   }, [])
 
   useEffect(() => {
-    const timer = setTimeout(() => load(query), 250)
+    const timer = setTimeout(() => load(query, archived), 250)
     return () => clearTimeout(timer)
-  }, [query, load])
+  }, [query, archived, load])
 
   return (
     <>
@@ -121,17 +122,26 @@ export default function PatientsPage() {
             aria-label="Buscar paciente"
           />
         </label>
+        <button
+          className="btn ghost"
+          onClick={() => {
+            setPatients(null) // a lista anterior não pode aparecer como resultado da nova
+            setArchived(!archived)
+          }}
+        >
+          <Archive size={16} /> {archived ? 'Ver pacientes ativos' : 'Ver arquivados'}
+        </button>
       </div>
 
       <ErrorList error={error} />
 
-      {patients && patients.length === 0 && !query && (
-        <Onboarding hasProducts={hasProducts} onNewPatient={() => setCreating(true)} onDemoLoaded={() => load('')} />
+      {patients && patients.length === 0 && !query && !archived && (
+        <Onboarding hasProducts={hasProducts} onNewPatient={() => setCreating(true)} onDemoLoaded={() => load('', false)} />
       )}
 
-      {patients && patients.length === 0 && query && (
+      {patients && patients.length === 0 && (query || archived) && (
         <div className="card empty">
-          <p>Nenhum paciente encontrado.</p>
+          <p>{query ? 'Nenhum paciente encontrado.' : 'Nenhum paciente arquivado.'}</p>
         </div>
       )}
 

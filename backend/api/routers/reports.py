@@ -101,10 +101,10 @@ def usage(
 @router.get("/reports/returns", response_model=ReturnsOut)
 @orm
 def returns(days: int = Query(90, ge=1, le=3650), user: User = Depends(current_user)):
-    """Pacientes cuja última aplicação foi há mais de `days` dias (sem anonimizados)."""
+    """Pacientes cuja última aplicação foi há mais de `days` dias (sem arquivados e sem dados ocultos)."""
     cutoff = timezone.now() - timedelta(days=days)
     patients = (
-        _not_anonymized(Patient.objects.filter(owner=user))
+        _not_anonymized(Patient.objects.filter(owner=user, archived_at__isnull=True))
         .annotate(last=Max("applications__applied_at"))
         .filter(last__isnull=False, last__lt=cutoff)
         .order_by("last")

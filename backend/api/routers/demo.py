@@ -18,7 +18,7 @@ class DemoOut(BaseModel):
 @router.post("/demo", response_model=DemoOut)
 @orm
 def load_demo(user: User = Depends(current_user)):
-    """Carrega os dados de demonstração, mas só para quem ainda não tem nenhum paciente."""
-    if Patient.objects.filter(owner=user).exists():
+    """Carrega os dados de demonstração, mas só para quem não tem nenhum paciente na lista."""
+    if Patient.objects.filter(owner=user, archived_at__isnull=True).exists():
         return DemoOut(created=False)
     return DemoOut(created=seed_demo(user))

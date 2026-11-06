@@ -1,7 +1,6 @@
-import { AlertTriangle, History, Package, Plus, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { AlertTriangle, History, Package, Plus, SlidersHorizontal } from 'lucide-react'
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { api } from '../api/client'
-import ConfirmModal from '../components/ConfirmModal'
 import ErrorList from '../components/ErrorList'
 import Modal from '../components/Modal'
 import { parseAmount } from '../planning/regions'
@@ -235,7 +234,6 @@ export default function InventoryPage() {
   const [error, setError] = useState(null)
   const [modal, setModal] = useState(null) // 'product' | 'lot'
   const [adjusting, setAdjusting] = useState(null) // lote em ajuste de saldo
-  const [removing, setRemoving] = useState(null) // { kind: 'product' | 'lot', item }
   const [openHistory, setOpenHistory] = useState(null) // id do lote com histórico aberto
 
   const load = useCallback(async () => {
@@ -334,13 +332,6 @@ export default function InventoryPage() {
                 >
                   {product.active ? 'Desativar' : 'Reativar'}
                 </button>
-                <button
-                  className="icon-btn"
-                  aria-label={`Excluir ${product.name}`}
-                  onClick={() => setRemoving({ kind: 'product', item: product })}
-                >
-                  <Trash2 size={15} />
-                </button>
               </div>
               {productLots.length ? (
                 <table className="inv-table">
@@ -384,13 +375,6 @@ export default function InventoryPage() {
                             <button className="icon-btn" aria-label={`Ajustar saldo do lote ${lot.number}`} onClick={() => setAdjusting(lot)}>
                               <SlidersHorizontal size={14} />
                             </button>
-                            <button
-                              className="icon-btn"
-                              aria-label={`Excluir lote ${lot.number}`}
-                              onClick={() => setRemoving({ kind: 'lot', item: lot })}
-                            >
-                              <Trash2 size={14} />
-                            </button>
                           </td>
                         </tr>
                         {openHistory === lot.id && <MovementsRow lotId={lot.id} />}
@@ -417,18 +401,6 @@ export default function InventoryPage() {
             setAdjusting(null)
             load()
           }}
-        />
-      )}
-      {removing && (
-        <ConfirmModal
-          title={removing.kind === 'product' ? 'Excluir produto' : 'Excluir lote'}
-          message={removing.kind === 'product' ? 'Excluir o produto e seus lotes?' : `Excluir o lote ${removing.item.number}?`}
-          confirmLabel="Excluir"
-          danger
-          onConfirm={() =>
-            run(() => (removing.kind === 'product' ? api.inventory.removeProduct(removing.item.id) : api.inventory.removeLot(removing.item.id)))
-          }
-          onClose={() => setRemoving(null)}
         />
       )}
     </div>

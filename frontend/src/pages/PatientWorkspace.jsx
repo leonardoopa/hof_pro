@@ -1,4 +1,4 @@
-import { ChevronLeft, EyeOff, Trash2 } from 'lucide-react'
+import { Archive, ArchiveRestore, ChevronLeft, Eye, EyeOff } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api/client'
@@ -19,24 +19,26 @@ export default function PatientWorkspace() {
   const navigate = useNavigate()
   const [patient, setPatient] = useState(null)
   const [error, setError] = useState(null)
-  const [confirm, setConfirm] = useState(null) // 'remove' | 'anonymize'
+  const [confirm, setConfirm] = useState(null) // 'archive' | 'anonymize'
 
   useEffect(() => {
     setPatient(null)
     api.patients.get(patientId).then(setPatient).catch(setError)
   }, [patientId])
 
-  async function anonymize() {
+  // Ocultar, mostrar e reativar devolvem o paciente atualizado e a tela continua aberta.
+  async function change(action) {
+    setError(null)
     try {
-      setPatient(await api.patients.anonymize(patient.id))
+      setPatient(await action(patient.id))
     } catch (err) {
       setError(err)
     }
   }
 
-  async function remove() {
+  async function archive() {
     try {
-      await api.patients.remove(patient.id)
+      await api.patients.archive(patient.id)
       navigate('/pacientes')
     } catch (err) {
       setError(err)
@@ -58,15 +60,26 @@ export default function PatientWorkspace() {
           <h1>{patient.full_name}</h1>
           <span className="meta">{[age != null && `${age} anos`, patient.phone, patient.email].filter(Boolean).join(' · ')}</span>
         </div>
+        {patient.archived_at && <span className="chip warn">Arquivado</span>}
         <span className="spacer" />
-        {!patient.anonymized_at && (
+        {patient.anonymized_at ? (
+          <button className="btn ghost small" onClick={() => change(api.patients.reveal)}>
+            <Eye size={15} /> Mostrar dados
+          </button>
+        ) : (
           <button className="btn ghost small" onClick={() => setConfirm('anonymize')}>
-            <EyeOff size={15} /> Anonimizar
+            <EyeOff size={15} /> Ocultar dados
           </button>
         )}
-        <button className="btn ghost danger small" onClick={() => setConfirm('remove')}>
-          <Trash2 size={15} /> Excluir
-        </button>
+        {patient.archived_at ? (
+          <button className="btn ghost small" onClick={() => change(api.patients.unarchive)}>
+            <ArchiveRestore size={15} /> Reativar
+          </button>
+        ) : (
+          <button className="btn ghost small" onClick={() => setConfirm('archive')}>
+            <Archive size={15} /> Arquivar
+          </button>
+        )}
       </div>
 
       <ErrorList error={error} />
@@ -82,23 +95,21 @@ export default function PatientWorkspace() {
 
       <Outlet context={{ patient }} />
 
-      {confirm === 'remove' && (
+      {confirm === 'archive' && (
         <ConfirmModal
-          title="Excluir paciente"
-          message={`Excluir ${patient.full_name} e todos os dados dele(a)? Isso não pode ser desfeito.`}
-          confirmLabel="Excluir"
-          danger
-          onConfirm={remove}
+          title="Arquivar paciente"
+          message={`${patient.full_name} sai da lista de pacientes. Nada é apagado: em "Ver arquivados" você abre a ficha e pode reativar.`}
+          confirmLabel="Arquivar"
+          onConfirm={archive}
           onClose={() => setConfirm(null)}
         />
       )}
       {confirm === 'anonymize' && (
         <ConfirmModal
-          title="Anonimizar paciente"
-          message="Nome, contato, observações e fotos serão apagados; o registro clínico e a rastreabilidade são mantidos. Isso não pode ser desfeito."
-          confirmLabel="Anonimizar"
-          danger
-          onConfirm={anonymize}
+          title="Ocultar dados do paciente"
+          message={'Nome, nascimento, contato, observações e fotos saem das telas e dos documentos, e o planejamento fica fechado. Nada é apagado: "Mostrar dados" traz tudo de volta. Anamnese, termos assinados e rastreabilidade continuam visíveis.'}
+          confirmLabel="Ocultar dados"
+          onConfirm={() => change(api.patients.anonymize)}
           onClose={() => setConfirm(null)}
         />
       )}

@@ -129,7 +129,7 @@ export default function ReportsPage() {
 
       <Section
         title="Retorno de pacientes"
-        sub="Última aplicação há mais dias do que o informado. Pacientes anonimizados não aparecem."
+        sub="Última aplicação há mais dias do que o informado. Pacientes arquivados ou com dados ocultos não aparecem."
         disabled={!returns?.patients.length}
         onExport={() =>
           downloadCsv(

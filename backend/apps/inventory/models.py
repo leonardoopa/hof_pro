@@ -57,9 +57,9 @@ class Lot(models.Model):
 
 class Application(models.Model):
     """Baixa de estoque: uma linha por ponto aplicado. Guarda cópia dos dados clínicos
-    para a rastreabilidade sobreviver à edição/remoção do plano."""
+    para a rastreabilidade não depender do plano."""
 
-    patient = models.ForeignKey(Patient, on_delete=models.PROTECT, related_name="applications")  # paciente com aplicações só sai por anonimização
+    patient = models.ForeignKey(Patient, on_delete=models.PROTECT, related_name="applications")
     plan = models.ForeignKey(FacialPlan, on_delete=models.SET_NULL, null=True, blank=True, related_name="applications")
     point = models.ForeignKey(PlanPoint, on_delete=models.SET_NULL, null=True, blank=True, related_name="applications")
     lot = models.ForeignKey(Lot, on_delete=models.PROTECT, related_name="applications")

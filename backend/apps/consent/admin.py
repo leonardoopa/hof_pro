@@ -1,10 +1,12 @@
 from django.contrib import admin, messages
 
+from apps.audit.retention import KeepRecordsAdmin
+
 from .models import Signature, Term
 
 
 @admin.register(Term)
-class TermAdmin(admin.ModelAdmin):
+class TermAdmin(KeepRecordsAdmin):
     list_display = ("kind", "version", "title", "active", "created_at")
     list_filter = ("kind", "active")
     actions = ["new_version"]
@@ -25,7 +27,7 @@ class TermAdmin(admin.ModelAdmin):
 
 
 @admin.register(Signature)
-class SignatureAdmin(admin.ModelAdmin):
+class SignatureAdmin(KeepRecordsAdmin):
     list_display = ("patient", "term", "signer_name", "signed_at", "revoked_at")
     readonly_fields = [f.name for f in Signature._meta.fields]
 

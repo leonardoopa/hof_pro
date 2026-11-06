@@ -144,7 +144,6 @@ def test_apply_deducts_balance_and_traceability(client, auth, other_auth, patien
     assert html.status_code == 200 and "A1" in html.text and "Maria Paciente" in html.text
     assert "Platisma (pescoço)" in html.text  # rótulo de região nova no impresso
     assert client.get(f"/api/patients/{patient['id']}/traceability/print").status_code == 401
-    assert client.delete(f"/api/inventory/lots/{l1['id']}", headers=auth).status_code == 409  # já aplicado
 
 
 def test_apply_never_goes_negative_and_is_atomic(client, auth, patient):
@@ -281,7 +280,7 @@ def test_seed_migration_creates_model_terms():
     assert "RDC" not in "".join(Term.objects.values_list("content", flat=True))
 
 
-# ---- exclusão / anonimização / auditoria de estoque ----
+# ---- arquivar / ocultar dados / auditoria de estoque ----
 def applied_patient(client, auth, patient, number="AN1", quantity=50, amount=10):
     prod = product(client, auth)
     l = lot(client, auth, prod["id"], number, quantity=quantity).json()
@@ -290,23 +289,40 @@ def applied_patient(client, auth, patient, number="AN1", quantity=50, amount=10)
     return l, plan
 
 
-def test_delete_patient_with_applications_is_409_and_without_still_works(client, auth, patient):
+def patient_actions(client, auth):
+    return [l["action"] for l in client.get("/api/audit", headers=auth).json() if l["resource"] == "paciente"]
+
+
+def test_archive_leaves_the_list_and_keeps_everything(client, auth, other_auth, patient):
     from apps.inventory.models import Application
 
+    pid = patient["id"]
+    photo = client.post(f"/api/patients/{pid}/photos", files={"file": ("a.png", png_bytes(), "image/png")}, headers=auth).json()
     applied_patient(client, auth, patient)
-    r = client.delete(f"/api/patients/{patient['id']}", headers=auth)
-    assert r.status_code == 409 and "anonim" in r.json()["detail"].lower()
-    assert Application.objects.filter(patient_id=patient["id"]).count() == 1
-    assert client.get(f"/api/patients/{patient['id']}", headers=auth).status_code == 200
 
-    free = client.post("/api/patients", json={"full_name": "Sem Aplicacao"}, headers=auth).json()
-    assert client.delete(f"/api/patients/{free['id']}", headers=auth).status_code == 204
+    assert client.post(f"/api/patients/{pid}/archive", headers=other_auth).status_code == 404
+    assert client.post(f"/api/patients/{pid}/archive").status_code == 401
+    assert client.post(f"/api/patients/{pid}/archive", headers=auth).json()["archived_at"]
+    assert client.get("/api/patients", headers=auth).json() == []
+    assert [p["id"] for p in client.get("/api/patients?archived=true", headers=auth).json()] == [pid]
+
+    # Arquivado continua abrindo inteiro: paciente, foto e rastreabilidade.
+    assert client.get(f"/api/patients/{pid}", headers=auth).json()["full_name"] == patient["full_name"]
+    assert client.get(f"/api/photos/{photo['id']}/file", headers=auth).status_code == 200
+    assert Application.objects.filter(patient_id=pid).count() == 1
+    assert len(client.get(f"/api/patients/{pid}/traceability", headers=auth).json()["rows"]) == 1
+
+    assert client.post(f"/api/patients/{pid}/unarchive", headers=other_auth).status_code == 404
+    assert client.post(f"/api/patients/{pid}/unarchive", headers=auth).json()["archived_at"] is None
+    assert client.post(f"/api/patients/{pid}/unarchive", headers=auth).status_code == 200  # idempotente
+    assert [p["id"] for p in client.get("/api/patients", headers=auth).json()] == [pid]
+    assert patient_actions(client, auth) == ["reativar", "arquivar"]
 
 
-def test_anonymize_clears_personal_data_keeps_traceability(client, auth, other_auth, questions):
+def test_hide_masks_personal_data_deletes_nothing_and_reveal_restores(client, auth, other_auth, questions):
     from apps.clinical.models import Anamnesis
     from apps.inventory.models import Application
-    from apps.patients.models import PatientPhoto
+    from apps.patients.models import PatientHiddenData, PatientPhoto
 
     p = client.post(
         "/api/patients",
@@ -318,7 +334,6 @@ def test_anonymize_clears_personal_data_keeps_traceability(client, auth, other_a
     path = PatientPhoto.objects.get(pk=photo["id"]).image.path
     import os
 
-    assert os.path.exists(path)
     client.put(
         f"/api/patients/{pid}/anamnesis",
         json={"notes": "texto livre sensivel", "answers": [{"question_id": questions[0].id, "answer": True, "detail": "penicilina"}]},
@@ -329,36 +344,62 @@ def test_anonymize_clears_personal_data_keeps_traceability(client, auth, other_a
         f"/api/patients/{pid}/consents", json={"term_id": term.id, "signer_name": "Joana Real", "signature": signature_data()}, headers=auth
     ).json()
     l, plan = applied_patient(client, auth, p, number="ANON")
+    draft = plan_with(client, auth, p, None, amount=3, point_key="procero").json()
 
     assert client.post(f"/api/patients/{pid}/anonymize", headers=other_auth).status_code == 404
     assert client.post(f"/api/patients/{pid}/anonymize").status_code == 401
     r = client.post(f"/api/patients/{pid}/anonymize", headers=auth)
     assert r.status_code == 200, r.text
     out = r.json()
-    assert out["full_name"].startswith("Paciente anonimizado") and out["anonymized_at"]
+    assert out["full_name"].startswith("Paciente com dados ocultos") and out["anonymized_at"]
     assert (out["phone"], out["email"], out["notes"], out["birth_date"]) == ("", "", "", None)
 
-    assert PatientPhoto.objects.filter(patient_id=pid).count() == 0 and not os.path.exists(path)
-    # Anamnese, assinaturas e notas do plano ficam: guarda do prontuário ainda em decisão (LGPD x Lei 13.787/2018).
-    assert Anamnesis.objects.filter(patient_id=pid).exists() and Signature.objects.filter(pk=sig["id"]).exists()
-
-    # rastreabilidade preservada, sem nome real
-    assert Application.objects.filter(patient_id=pid).count() == 1
+    # Sai das telas e dos documentos.
+    assert client.get(f"/api/patients/{pid}/photos", headers=auth).json() == []
+    assert client.get(f"/api/photos/{photo['id']}/file", headers=auth).status_code == 404
+    assert client.get("/api/patients?q=Joana", headers=auth).json() == []
     trace = client.get(f"/api/patients/{pid}/traceability", headers=auth).json()
-    assert trace["rows"][0]["lot_number"] == "ANON" and trace["patient_name"].startswith("Paciente anonimizado")
-    assert "Joana" not in trace["patient_name"]
+    assert trace["rows"][0]["lot_number"] == "ANON" and trace["patient_name"].startswith("Paciente com dados ocultos")
     assert "Joana" not in client.get(f"/api/patients/{pid}/traceability/print", headers=auth).text
-    # ainda não pode excluir
-    assert client.delete(f"/api/patients/{pid}", headers=auth).status_code == 409
+
+    # A tela não recebe foto nem pontos, então salvar dali esvaziaria o plano.
+    assert client.put(f"/api/plans/{draft['id']}", json={"points": []}, headers=auth).status_code == 409
+    assert plan_with(client, auth, p, None).status_code == 409
+    assert client.post(f"/api/patients/{pid}/photos", files={"file": ("b.png", png_bytes(), "image/png")}, headers=auth).status_code == 409
+    assert len(client.get(f"/api/plans/{draft['id']}", headers=auth).json()["points"]) == 1
+
+    # Nada foi apagado.
+    assert PatientPhoto.objects.filter(pk=photo["id"]).exists() and os.path.exists(path)
+    assert Anamnesis.objects.filter(patient_id=pid).exists() and Signature.objects.filter(pk=sig["id"]).exists()
+    assert Application.objects.filter(patient_id=pid).count() == 1
+
+    # "Mostrar dados" devolve tudo, só para o dono.
+    assert client.post(f"/api/patients/{pid}/reveal", headers=other_auth).status_code == 404
+    assert client.post(f"/api/patients/{pid}/reveal").status_code == 401
+    back = client.post(f"/api/patients/{pid}/reveal", headers=auth).json()
+    assert (back["full_name"], back["phone"], back["email"], back["notes"], back["birth_date"]) == (
+        "Joana Real", "11999990000", "joana@x.com", "obs", "1990-01-02",
+    )
+    assert back["anonymized_at"] is None
+    assert [item["id"] for item in client.get(f"/api/patients/{pid}/photos", headers=auth).json()] == [photo["id"]]
+    assert client.get(f"/api/photos/{photo['id']}/file", headers=auth).status_code == 200
+    assert client.post(f"/api/patients/{pid}/reveal", headers=auth).status_code == 200  # idempotente
+
+    # Ocultar de novo acrescenta outra cópia, e a anterior fica.
+    client.patch(f"/api/patients/{pid}", json={"phone": "11888880000"}, headers=auth)
+    client.post(f"/api/patients/{pid}/anonymize", headers=auth)
+    assert PatientHiddenData.objects.filter(patient_id=pid).count() == 2
+    assert client.post(f"/api/patients/{pid}/reveal", headers=auth).json()["phone"] == "11888880000"
+    assert patient_actions(client, auth) == ["mostrar", "anonimizar", "mostrar", "anonimizar"]
 
 
-def test_delete_applied_plan_is_409(client, auth, patient):
-    l, plan = applied_patient(client, auth, patient)
-    assert client.delete(f"/api/plans/{plan['id']}", headers=auth).status_code == 409
-    assert client.get("/api/inventory/lots", headers=auth).json()[0]["balance"] == 40  # saldo intacto
-    assert client.get(f"/api/plans/{plan['id']}", headers=auth).status_code == 200
-    draft = plan_with(client, auth, patient, None).json()
-    assert client.delete(f"/api/plans/{draft['id']}", headers=auth).status_code == 204
+def test_reveal_of_patient_anonymized_by_the_old_version_is_409(client, auth, patient):
+    from apps.patients.models import Patient
+
+    Patient.objects.filter(pk=patient["id"]).update(full_name="Paciente anonimizado #1", anonymized_at=timezone.now())
+    r = client.post(f"/api/patients/{patient['id']}/reveal", headers=auth)
+    assert r.status_code == 409 and "versão antiga" in r.json()["detail"]
+    assert client.get(f"/api/patients/{patient['id']}", headers=auth).json()["anonymized_at"]
 
 
 def test_double_apply_second_is_409_and_deducts_once(client, auth, patient):

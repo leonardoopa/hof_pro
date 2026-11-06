@@ -43,6 +43,12 @@ def _check_photo(patient, photo_id):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Foto não pertence a este paciente.")
 
 
+def _check_not_hidden(patient) -> None:
+    # Com os dados ocultos a tela não recebe a foto nem os pontos: salvar dali esvaziaria o plano.
+    if patient.anonymized_at is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Paciente com dados ocultos: mostre os dados antes de alterar o plano.")
+
+
 def _replace_points(plan: FacialPlan, points) -> None:
     from .inventory import validate_point_lots  # import tardio: inventory importa _own_plan daqui
 
@@ -83,6 +89,7 @@ def list_plans(patient_id: int, user: User = Depends(current_user)):
 @orm
 def create_plan(patient_id: int, data: PlanIn, user: User = Depends(current_user)):
     patient = get_patient_or_404(user, patient_id)
+    _check_not_hidden(patient)
     _check_photo(patient, data.photo_id)
     with transaction.atomic():
         plan = FacialPlan.objects.create(
@@ -104,6 +111,7 @@ def update_plan(plan_id: int, data: PlanIn, user: User = Depends(current_user)):
     plan = _own_plan(user, plan_id)
     if plan.applied_at:
         raise HTTPException(status.HTTP_409_CONFLICT, "Plano já aplicado não pode ser alterado: crie um novo plano.")
+    _check_not_hidden(plan.patient)
     _check_photo(plan.patient, data.photo_id)
     with transaction.atomic():
         plan.photo_id = data.photo_id
@@ -112,14 +120,3 @@ def update_plan(plan_id: int, data: PlanIn, user: User = Depends(current_user)):
         plan.save()
         _replace_points(plan, data.points)
     return _plan_out(_own_plan(user, plan_id))
-
-
-@router.delete("/plans/{plan_id}", status_code=status.HTTP_204_NO_CONTENT)
-@orm
-def delete_plan(plan_id: int, user: User = Depends(current_user)):
-    plan = _own_plan(user, plan_id)
-    if plan.applied_at:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT, "Plano já aplicado não pode ser excluído: o estoque já recebeu baixa e a rastreabilidade depende dele."
-        )
-    plan.delete()

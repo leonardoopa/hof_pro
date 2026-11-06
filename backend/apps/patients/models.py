@@ -11,7 +11,8 @@ class Patient(models.Model):
     phone = models.CharField("telefone", max_length=30, blank=True)
     email = models.EmailField("e-mail", blank=True)
     notes = models.TextField("observações", blank=True)
-    anonymized_at = models.DateTimeField("anonimizado em", null=True, blank=True)
+    anonymized_at = models.DateTimeField("anonimizado em", null=True, blank=True)  # preenchido = dados ocultos, ver PatientHiddenData
+    archived_at = models.DateTimeField("arquivado em", null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -20,6 +21,23 @@ class Patient(models.Model):
 
     def __str__(self):
         return self.full_name
+
+
+class PatientHiddenData(models.Model):
+    """Cópia dos dados pessoais feita ao ocultá-los, uma linha por vez. Só a rota `reveal` lê daqui:
+    o resto do sistema lê o Patient já mascarado, então tela ou documento novo não vaza o dado."""
+
+    patient = models.ForeignKey(Patient, on_delete=models.PROTECT, related_name="hidden_data")
+    full_name = models.CharField("nome completo", max_length=150)
+    birth_date = models.DateField("nascimento", null=True, blank=True)
+    phone = models.CharField("telefone", max_length=30, blank=True)
+    email = models.EmailField("e-mail", blank=True)
+    notes = models.TextField("observações", blank=True)
+    hidden_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
 
 
 def photo_path(instance, filename):

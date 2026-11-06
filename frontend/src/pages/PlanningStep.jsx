@@ -209,6 +209,8 @@ export default function PlanningStep() {
   )
 
   useEffect(() => {
+    // Com os dados ocultos não carrega nada. Ao mostrar de novo, se a foto já estava aberta, o rascunho continua como estava.
+    if (patient.anonymized_at || image) return
     let alive = true
     ;(async () => {
       try {
@@ -234,9 +236,12 @@ export default function PlanningStep() {
     })()
     return () => {
       alive = false
-      if (blobUrl.current) URL.revokeObjectURL(blobUrl.current)
     }
-  }, [patient.id, showPhoto])
+  }, [patient.id, patient.anonymized_at, showPhoto])
+
+  useEffect(() => () => {
+    if (blobUrl.current) URL.revokeObjectURL(blobUrl.current)
+  }, [])
 
   useEffect(() => {
     if (!dirty) return
@@ -444,6 +449,15 @@ export default function PlanningStep() {
     setDirty(true)
   }
 
+  if (patient.anonymized_at) {
+    return (
+      <div className="empty-state">
+        <EyeOff size={28} />
+        <h2>Planejamento oculto</h2>
+        <p>A foto e os pontos continuam guardados. Use "Mostrar dados" para vê-los e editar o plano.</p>
+      </div>
+    )
+  }
   if (loading) return <div className="boot">Carregando…</div>
 
   const applied = Boolean(plan?.applied_at)

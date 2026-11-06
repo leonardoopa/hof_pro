@@ -1,11 +1,13 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 
+from apps.audit.retention import KeepRecordsAdmin
+
 from .models import User
 
 
 @admin.register(User)
-class HofUserAdmin(UserAdmin):
+class HofUserAdmin(KeepRecordsAdmin, UserAdmin):
     ordering = ("email",)
     list_display = ("email", "full_name", "professional_title", "is_active", "is_staff")
     search_fields = ("email", "full_name")
