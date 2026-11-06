@@ -10,7 +10,11 @@
 }
 @media (max-width: 1100px) {
   .planning {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* região aberta: os pontos logo abaixo da foto, antes do resumo */
+  .planning.zoomed .regions-card {
+    order: -1;
   }
 }
 
@@ -148,6 +152,15 @@
 .hotspot:hover {
   transform: translate(-50%, -50%) scale(1.2);
 }
+/* o rótulo está dentro do hotspot: para ficar legível, o hotspot dele sobe acima dos demais e dos pontos (z-index 3) */
+.hotspot.show-label {
+  z-index: 4;
+}
+.hotspot.hover,
+.hotspot:hover,
+.hotspot:focus-visible {
+  z-index: 5;
+}
 .hotspot-label {
   position: absolute;
   left: 50%;
@@ -184,12 +197,27 @@
   align-items: flex-start;
   transform: none;
 }
-/* rótulo fixo só nas regiões preenchidas que cabem sem cobrir outro (layout.js); os demais, no hover/foco */
+/* rótulo fixo só nas regiões preenchidas onde há lugar, na posição escolhida em layout.js; os demais, no hover/foco */
 .hotspot.show-label .hotspot-label,
 .hotspot.hover .hotspot-label,
 .hotspot:hover .hotspot-label,
 .hotspot:focus-visible .hotspot-label {
   opacity: 1;
+}
+.hotspot.label-below .hotspot-label {
+  top: calc(100% + 8px);
+  bottom: auto;
+}
+.hotspot.label-side .hotspot-label {
+  top: 50%;
+  bottom: auto;
+  transform: translateY(-50%);
+}
+.hotspot.side-D.label-side .hotspot-label {
+  right: calc(100% + 8px);
+}
+.hotspot.side-E.label-side .hotspot-label {
+  left: calc(100% + 8px);
 }
 @keyframes pulse {
   70% {
@@ -231,6 +259,9 @@
   cursor: grab;
   touch-action: none;
   transform: translate(-50%, -50%) scale(calc(1 / var(--s)));
+}
+.stage.read-only .pt {
+  cursor: pointer;
 }
 .pt:active {
   cursor: grabbing;
@@ -377,6 +408,10 @@
 .point-list {
   display: grid;
   gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 .prow {
   display: grid;

@@ -56,7 +56,11 @@ npm run dev        # http://localhost:5173 (proxy de /api para :8000)
 
 Para usar SQL Server sem Docker no backend, instale o driver (`brew tap microsoft/mssql-release && brew install msodbcsql18`), deixe `DB_ENGINE=mssql` no `.env` da raiz e ajuste os `DB_*`, rode `manage.py ensure_db` (cria o banco) e depois `migrate`.
 
-Testes (SQLite, não precisam de SQL Server): `cd backend && ../.venv/bin/python -m pytest`
+Testes:
+
+- Backend (SQLite, não precisa de SQL Server): `cd backend && ../.venv/bin/python -m pytest`
+- Front, funções puras (pontos, simetria, layout): `cd frontend && npm test`
+- Front no navegador (Playwright): `cd frontend && npx playwright install --only-shell chromium && npm run test:e2e`. A suíte sobe o próprio backend (porta 8001) e o próprio frontend (porta 5174), com banco e fotos descartáveis, e falha se as portas estiverem ocupadas. O teste com detecção real precisa de internet: baixa o runtime e o modelo do MediaPipe e um retrato de exemplo, que fica fora do repositório.
 
 ## O que existe
 
@@ -71,7 +75,7 @@ Testes (SQLite, não precisam de SQL Server): `cd backend && ../.venv/bin/python
     - terço inferior: boca, marionete, DAO, mento (inclui mentual), pré-jowl, mandíbula, masseter;
     - pescoço: platisma;
   - cada ponto sugerido tem nome anatômico (ex.: prócero, corrugador medial, arco do cupido), salvo no plano; a região mostra um alerta de risco quando o estudo em `docs/IMPLEMENTACAO-FOTO-PONTOS-ANTES-DEPOIS.md` tem fonte para ele. Doses de referência não aparecem até serem validadas por profissional;
-  - planos salvos antes de uma região existir ganham os pontos dela (quantidade 0) ao abrir;
+  - planos salvos antes dos nomes de ponto ganham as regiões que faltam (quantidade 0) ao abrir; nos demais, região vazia é escolha do profissional e continua vazia;
   - tocar numa região dá zoom e mostra os pontos; cada ponto tem produto e quantidade, pode ser arrastado, removido ou adicionado;
   - resumo ao vivo: total de ml (preenchimentos), unidades (toxina) e número de áreas;
   - **Simular resultado**: comparação antes/depois ilustrativa (suavização para toxina, volume local para preenchedores).
@@ -90,10 +94,9 @@ Testes (SQLite, não precisam de SQL Server): `cd backend && ../.venv/bin/python
 - A simulação é um efeito de imagem no navegador, não um modelo de IA. A IA que simula o tratamento (anotada no esboço) é a próxima etapa e exige um modelo generativo e revisão clínica.
 - Fotos de pacientes são dados sensíveis (LGPD). Ficam em `backend/media`, sem rota pública, e só saem por `/api/photos/{id}/file` com token. O upload é regravado como JPEG, o que remove EXIF/GPS.
 - O MediaPipe roda localmente: a foto não vai para nenhum serviço. Só o runtime WASM (jsDelivr) e o modelo (Google Storage) são baixados; para produção ou uso offline, hospede os dois (`frontend/src/planning/faceLandmarks.js`).
-- Sem rate limit no login e sem refresh token ainda.
+- Sem refresh token ainda. O limite de tentativas de login fica em memória: com vários processos, precisa de armazenamento compartilhado.
 
 ## Próximos passos
 
 1. Financeiro (orçamentos e recebimentos) e histórico por paciente.
 2. Simulação por IA a partir do planejamento.
-3. Tratamento de exclusão de paciente com aplicações (devolver saldo ou bloquear) e testes de front.

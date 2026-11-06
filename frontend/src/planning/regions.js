@@ -210,6 +210,8 @@ export function pointLabel(region, key) {
 export const treatmentOf = (key) => TREATMENTS.find((t) => t.key === key) ?? TREATMENTS[1]
 
 export const round2 = (n) => Math.round(n * 100) / 100
+/** Lê quantidade digitada: "0,3" e "0.3" valem o mesmo. Vazio ou inválido vale 0. */
+export const parseAmount = (text) => parseFloat(String(text).replace(',', '.')) || 0
 export const formatAmount = (n) => n.toLocaleString('pt-BR', { maximumFractionDigits: 2 })
 
 export function totalsOf(points) {

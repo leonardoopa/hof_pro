@@ -54,9 +54,9 @@ for (const [name, items] of Object.entries(SURFACES)) {
     assert.deepEqual(spreadHotspots(items, stage), spread, `${where}: layout não determinístico`)
 
     // Todas as regiões preenchidas: o rótulo fixo aparece onde cabe e os demais ficam para hover/foco.
-    const labels = spread.map((p, i) => ({ ...p, side: items[i].side, lines: ['Nome da região', '1 ml'], want: true }))
+    const labels = spread.map((p, i) => ({ ...p, side: items[i].side, lines: ['Glabela', '1 ml'], want: true }))
     const shown = fitLabels(labels, stage).filter(Boolean).length
-    assert.ok(shown >= 5 && shown <= items.length, `${where}: ${shown} rótulos fixos`)
+    assert.ok(shown >= 3 && shown < items.length, `${where}: ${shown} rótulos fixos`)
   }
 }
 
@@ -70,18 +70,28 @@ assert.ok(Math.hypot((twins[0].x - twins[1].x) * 500, (twins[0].y - twins[1].y) 
 
 // Palco ainda sem tamanho (antes do primeiro ResizeObserver): não mexe em nada e não mostra rótulo.
 assert.deepEqual(spreadHotspots(far, { width: 0, height: 0 }), far)
-assert.deepEqual(fitLabels([{ ...far[0], side: 'C', lines: ['Testa'], want: true }], { width: 0, height: 0 }), [false])
+assert.deepEqual(fitLabels([{ ...far[0], side: 'C', lines: ['Testa'], want: true }], { width: 0, height: 0 }), [null])
 
 const STAGE = { width: 500, height: 500 }
-const label = (x, y, side, want = true) => ({ x, y, side, lines: ['Nome da região'], want })
+const label = (x, y, side, want = true) => ({ x, y, side, lines: ['Região'], want })
 
-// Sem quantidade: sem rótulo fixo, e não ocupa lugar de outro.
-assert.deepEqual(fitLabels([label(0.5, 0.5, 'C', false), label(0.5, 0.5, 'C')], STAGE), [false, true])
-// Mesmo lugar: fica o primeiro.
-assert.deepEqual(fitLabels([label(0.5, 0.5, 'C'), label(0.5, 0.5, 'C')], STAGE), [true, false])
-// D cresce para a esquerda e E para a direita: pares simétricos no mesmo y não colidem.
-assert.deepEqual(fitLabels([label(0.4, 0.5, 'D'), label(0.6, 0.5, 'E')], STAGE), [true, true])
-// Invertidos, os dois crescem para o meio e colidem.
-assert.deepEqual(fitLabels([label(0.6, 0.5, 'D'), label(0.4, 0.5, 'E')], STAGE), [true, false])
+// Sem quantidade: sem rótulo fixo.
+assert.deepEqual(fitLabels([label(0.5, 0.5, 'C', false)], STAGE), [null])
+// Central: acima; se já ocupado, abaixo; sem lugar, só no hover/foco.
+assert.deepEqual(fitLabels([label(0.5, 0.5, 'C'), label(0.5, 0.5, 'C'), label(0.5, 0.5, 'C')], STAGE), ['above', 'below', null])
+// D e E: para fora do rosto, sem colidir no meio.
+assert.deepEqual(fitLabels([label(0.4, 0.5, 'D'), label(0.6, 0.5, 'E')], STAGE), ['side', 'side'])
+// Sem espaço ao lado: acima.
+assert.deepEqual(fitLabels([label(0.14, 0.5, 'D')], STAGE), ['above'])
+// Na borda de cima: abaixo, para não ser cortado pelo palco.
+assert.deepEqual(fitLabels([label(0.5, 0.03, 'C')], STAGE), ['below'])
+// Hotspot preenchido logo acima: o rótulo vai para baixo, mesmo sendo o preferido.
+assert.deepEqual(fitLabels([label(0.5, 0.42, 'C'), label(0.5, 0.5, 'C')], STAGE)[1], 'below')
+// Hotspot vazio logo acima: também evita, enquanto houver lugar livre.
+assert.deepEqual(fitLabels([label(0.5, 0.42, 'C', false), label(0.5, 0.5, 'C')], STAGE)[1], 'below')
+// Vazios acima e abaixo e nenhum lugar livre: cobre um vazio, para a região preenchida não perder o rótulo.
+assert.deepEqual(fitLabels([label(0.5, 0.42, 'C', false), label(0.5, 0.58, 'C', false), label(0.5, 0.5, 'C')], STAGE)[2], 'above')
+// Preenchidos acima e abaixo: nunca cobre, fica só no hover/foco.
+assert.deepEqual(fitLabels([label(0.5, 0.42, 'C'), label(0.5, 0.58, 'C'), label(0.5, 0.5, 'C')], STAGE)[2], null)
 
 console.log('layout.check: ok')
