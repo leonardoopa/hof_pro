@@ -371,6 +371,7 @@ def test_hide_masks_personal_data_deletes_nothing_and_reveal_restores(client, au
     # Nada foi apagado.
     assert PatientPhoto.objects.filter(pk=photo["id"]).exists() and os.path.exists(path)
     assert Anamnesis.objects.filter(patient_id=pid).exists() and Signature.objects.filter(pk=sig["id"]).exists()
+    assert client.get(f"/api/patients/{pid}/anamnesis/versions", headers=auth).json()[0]["notes"] == "texto livre sensivel"
     assert Application.objects.filter(patient_id=pid).count() == 1
 
     # "Mostrar dados" devolve tudo, só para o dono.

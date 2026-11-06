@@ -113,6 +113,7 @@ export const api = {
     questions: () => data('/anamnesis/questions'),
     get: (patientId) => data(`/patients/${patientId}/anamnesis`),
     save: (patientId, body) => data(`/patients/${patientId}/anamnesis`, { method: 'PUT', json: body }),
+    versions: (patientId) => data(`/patients/${patientId}/anamnesis/versions`),
   },
 
   plans: {

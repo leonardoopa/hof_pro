@@ -8,7 +8,8 @@ from django.contrib import admin
 from django.db.models import ProtectedError
 from django.db.models.signals import pre_delete
 
-# Catálogos saem de uso pelo campo `active`. Respostas e pontos são regravados ao editar anamnese e rascunho de plano.
+# Catálogos saem de uso pelo campo `active`. Respostas e pontos são regravados ao editar anamnese e rascunho de plano;
+# as respostas anteriores continuam em AnamnesisVersion.
 NOT_PROTECTED = {
     "clinical.AnamnesisQuestion",
     "clinical.AnamnesisAnswer",

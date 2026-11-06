@@ -66,7 +66,7 @@ Testes:
 
 - **Login e cadastro** por e-mail e senha (JWT, 12 h). Cada profissional só enxerga os próprios pacientes.
 - **Pacientes**: lista com busca, cadastro, arquivamento e ocultação de dados. Nada é apagado.
-- **Anamnese**: 15 perguntas sim/não semeadas por migration (editáveis no admin Django). "Sim" exige descrição.
+- **Anamnese**: 15 perguntas sim/não semeadas por migration (editáveis no admin Django). "Sim" exige descrição. Cada alteração salva vira uma versão que não muda mais, com autor, data e a pergunta como foi feita; a tela mostra o histórico e o que mudou em cada versão. Anamnese salva antes deste recurso começa na versão 1, com o estado em que estava: o que já tinha sido sobrescrito não volta.
 - **Planejamento facial**:
   - foto frontal pela câmera ou por upload;
   - o MediaPipe detecta o rosto no navegador e posiciona os pontos sugeridos em 19 regiões:
@@ -91,7 +91,7 @@ Testes:
 
 - **Nada se apaga** (decisão do responsável pelo projeto, 2026-11-06). A API não tem rota DELETE, o admin não oferece exclusão e o ORM recusa apagar registro (`apps/audit/retention.py`). Paciente sai da lista por **arquivamento**, com volta. Produto é desativado. Lote lançado errado tem o saldo ajustado com motivo.
 - **Ocultar dados** tira nome, nascimento, contato, observações e fotos das telas e dos documentos, e fecha o planejamento. Tudo fica guardado e "Mostrar dados" devolve. Anamnese, termos assinados (com o nome de quem assinou) e rastreabilidade continuam visíveis. Como o dado continua guardado, isto **não é anonimização para a LGPD**: o sistema não atende um pedido de eliminação feito pelo paciente, e a guarda sem prazo final precisa de validação com assessoria jurídica.
-- Editar ainda sobrescreve o valor anterior: cadastro, anamnese e rascunho de plano não têm histórico. Plano aplicado e assinatura não mudam. Quem tem acesso direto ao banco ou aos arquivos de foto ainda pode apagá-los; backup é tarefa da implantação.
+- Editar ainda sobrescreve o valor anterior no cadastro e no rascunho de plano, que não têm histórico. Plano aplicado e assinatura não mudam. Quem tem acesso direto ao banco ou aos arquivos de foto ainda pode apagá-los; backup é tarefa da implantação.
 - "Valor do ml" é a **quantidade** aplicada em cada ponto, sem preço. Orçamentos e recebimentos, quando existirem, ficam no Financeiro.
 - Toxina é dosada em **unidades (U)**; preenchimento, bioestimulador, skinbooster e outro, em **ml**.
 - A simulação é um efeito de imagem no navegador, não um modelo de IA. A IA que simula o tratamento (anotada no esboço) é a próxima etapa e exige um modelo generativo e revisão clínica.

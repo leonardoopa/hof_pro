@@ -115,6 +115,22 @@ class AnamnesisOut(BaseModel):
     answers: list[AnswerOut]
     notes: str
     updated_at: datetime | None
+    version: int | None
+
+
+class VersionAnswerOut(ORM):
+    question_id: int
+    question_text: str
+    answer: bool
+    detail: str
+
+
+class AnamnesisVersionOut(BaseModel):
+    number: int
+    notes: str
+    saved_by: str
+    saved_at: datetime
+    answers: list[VersionAnswerOut]
 
 
 # ---- planejamento ----

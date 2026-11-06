@@ -8,8 +8,8 @@ from api import ratelimit
 from api.main import create_app
 from apps.clinical.models import AnamnesisQuestion
 
-# O banco de teste é limpo a cada teste (transaction=True), inclusive as perguntas semeadas
-# pela migration; os testes que precisam delas usam a fixture `questions`.
+# O banco de teste é limpo ao fim de cada teste (transaction=True), inclusive as perguntas semeadas
+# pela migration; os testes que precisam de perguntas usam a fixture `questions`.
 pytestmark = pytest.mark.django_db(transaction=True)
 
 
@@ -28,6 +28,7 @@ def client():
 
 @pytest.fixture
 def questions():
+    AnamnesisQuestion.objects.all().delete()  # no primeiro teste da sessão, as semeadas ainda estão no banco
     return [
         AnamnesisQuestion.objects.create(key="alergias", text="Possui alergias?", order=1),
         AnamnesisQuestion.objects.create(key="fumante", text="É fumante?", order=2),

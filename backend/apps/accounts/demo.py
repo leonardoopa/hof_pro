@@ -52,6 +52,7 @@ def _anamnesis(patient: Patient) -> None:
     AnamnesisAnswer.objects.bulk_create(
         AnamnesisAnswer(anamnesis=anamnesis, question=q, answer=False) for q in AnamnesisQuestion.objects.filter(active=True)
     )
+    anamnesis.record_version(patient.owner)
 
 
 def _plan(user, patient, title, specs, lots, apply_days_ago=None) -> None:
