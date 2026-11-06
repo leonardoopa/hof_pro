@@ -67,6 +67,7 @@ class Application(models.Model):
     amount = models.DecimalField(max_digits=6, decimal_places=2)
     unit = models.CharField(max_length=2)
     region = models.CharField(max_length=20)
+    point_key = models.CharField(max_length=40, blank=True, default="")  # "" = ponto adicionado à mão ou plano antigo
     treatment = models.CharField(max_length=20)
     technique = models.CharField(max_length=20, blank=True)
     depth = models.CharField(max_length=20, blank=True)
