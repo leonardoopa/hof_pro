@@ -131,22 +131,37 @@
   pointer-events: none;
 }
 
-/* hotspots (visão geral) */
+/* hotspots (visão geral): a área de toque é o botão inteiro; o círculo desenhado é o ::before */
 .hotspot {
   position: absolute;
   width: 26px;
   height: 26px;
   padding: 0;
-  border: 2px solid #fff;
+  border: 0;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--primary) 60%, transparent);
-  box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 50%, transparent), 0 2px 6px rgba(0, 0, 0, 0.25);
+  background: none;
   transform: translate(-50%, -50%);
-  animation: pulse 2.4s infinite;
 }
-.hotspot.filled {
+/* Vazio: anel fino e menor, para o rosto continuar visível sob as marcações. */
+.hotspot::before {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border: 1.5px solid #fff;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--primary) 25%, transparent);
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: background-color var(--dur);
+}
+.hotspot.hover::before,
+.hotspot:hover::before,
+.hotspot:focus-visible::before {
+  background: color-mix(in srgb, var(--primary) 75%, transparent);
+}
+.hotspot.filled::before {
+  inset: 0;
+  border-width: 2px;
   background: var(--primary);
-  animation: none;
 }
 .hotspot.hover,
 .hotspot:hover {
@@ -219,14 +234,6 @@
 .hotspot.side-E.label-side .hotspot-label {
   left: calc(100% + 8px);
 }
-@keyframes pulse {
-  70% {
-    box-shadow: 0 0 0 12px color-mix(in srgb, var(--primary) 0%, transparent), 0 2px 6px rgba(0, 0, 0, 0.25);
-  }
-  100% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 0%, transparent), 0 2px 6px rgba(0, 0, 0, 0.25);
-  }
-}
 
 .dot {
   position: absolute;
@@ -296,6 +303,17 @@
 /* camada de simulação */
 .stage-inner .sim-layer {
   z-index: 1;
+}
+.sim-divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  width: 3px;
+  background: #fff;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
+  transform: translateX(-50%) scaleX(calc(1 / var(--s)));
+  pointer-events: none;
 }
 .stage-foot {
   display: flex;
@@ -436,6 +454,11 @@
   width: 74px;
   text-align: center;
 }
+.prow .amount-name {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
 .prow .unit {
   min-width: 22px;
   color: var(--muted);
@@ -504,9 +527,6 @@
   outline-offset: 2px;
 }
 @media (prefers-reduced-motion: reduce) {
-  .hotspot {
-    animation: none;
-  }
   .stage-inner {
     transition: none;
   }
