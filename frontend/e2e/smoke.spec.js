@@ -45,6 +45,58 @@ test('anamnese: "Sim" exige descrição e depois salva', async ({ page }) => {
   expect(errors).toEqual([])
 })
 
+test('anamnese: cada alteração salva vira uma versão e as anteriores continuam lá', async ({ page }) => {
+  const errors = collectPageErrors(page)
+  const api = await signIn(page)
+  const patient = await createPatient(api)
+  const [question] = await api.get('/anamnesis/questions')
+  await page.goto(`/pacientes/${patient.id}/anamnese`)
+  const save = page.getByRole('button', { name: 'Salvar anamnese' })
+  const group = page.getByRole('group', { name: question.text })
+  const detail = page.getByLabel(`${question.text} — ${question.detail_prompt}`)
+  const versions = page.locator('details.version')
+  await expect(save).toBeVisible()
+  await expect(page.getByText('Histórico de versões')).toHaveCount(0)
+
+  await group.getByRole('button', { name: 'Não' }).click()
+  await save.click()
+  await expect(toast(page, 'Anamnese salva')).toBeVisible()
+  await expect(versions).toHaveCount(1)
+  await expect(versions.first().locator('summary')).toContainText('Primeira versão guardada')
+
+  // Salvar sem mudar nada não cria versão.
+  await save.click()
+  await expect(toast(page, 'Nada mudou: continua a versão 1')).toBeVisible()
+  expect(await api.get(`/patients/${patient.id}/anamnesis/versions`)).toHaveLength(1)
+
+  await group.getByRole('button', { name: 'Sim' }).click()
+  await detail.fill('Alergia a lidocaína')
+  await save.click()
+  await expect(versions).toHaveCount(2)
+  await expect(page.getByText(/^Versão 2, salva em/)).toBeVisible()
+
+  const latest = versions.first()
+  for (const text of ['Versão 2', 'Atual', 'Profissional E2E', '1 alteração']) {
+    await expect(latest.locator('summary')).toContainText(text)
+  }
+  await latest.locator('summary').click()
+  const changed = latest.locator('li.changed')
+  await expect(changed).toHaveCount(1)
+  for (const text of [question.text, 'Sim: Alergia a lidocaína', 'Antes: Não']) await expect(changed).toContainText(text)
+
+  // A versão antiga continua como foi salva, também depois de recarregar. O formulário segue na atual.
+  await page.reload()
+  await expect(detail).toHaveValue('Alergia a lidocaína')
+  const oldest = versions.last()
+  await expect(oldest.locator('summary')).not.toContainText('Atual')
+  await oldest.locator('summary').click()
+  const row = oldest.locator('li', { hasText: question.text })
+  await expect(row).toContainText('Não')
+  await expect(row).not.toContainText('lidocaína')
+  await expect(oldest.locator('li.changed')).toHaveCount(0)
+  expect(errors).toEqual([])
+})
+
 test('termo de uso de imagem: assinado desenhando no canvas e depois revogado', async ({ page }) => {
   const errors = collectPageErrors(page)
   const api = await signIn(page)

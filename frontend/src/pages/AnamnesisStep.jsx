@@ -4,6 +4,7 @@ import { useNavigate, useOutletContext } from 'react-router-dom'
 import { api } from '../api/client'
 import ErrorList from '../components/ErrorList'
 import { useToast } from '../components/Toast'
+import AnamnesisHistory from './AnamnesisHistory'
 
 export default function AnamnesisStep() {
   const { patient } = useOutletContext()
@@ -12,6 +13,7 @@ export default function AnamnesisStep() {
   const [answers, setAnswers] = useState({}) // question_id -> { answer: bool, detail }
   const [notes, setNotes] = useState('')
   const [savedAt, setSavedAt] = useState(null)
+  const [version, setVersion] = useState(null)
   const [showMissing, setShowMissing] = useState(false)
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -26,6 +28,7 @@ export default function AnamnesisStep() {
         setAnswers(Object.fromEntries(saved.answers.map((a) => [a.question_id, { answer: a.answer, detail: a.detail }])))
         setNotes(saved.notes)
         setSavedAt(saved.updated_at)
+        setVersion(saved.version)
       })
       .catch((err) => alive && setError(err))
     return () => {
@@ -58,7 +61,8 @@ export default function AnamnesisStep() {
       }
       const saved = await api.anamnesis.save(patient.id, body)
       setSavedAt(saved.updated_at)
-      toast('Anamnese salva')
+      setVersion(saved.version)
+      toast(saved.version === version ? `Nada mudou: continua a versão ${version}` : 'Anamnese salva')
     } catch (err) {
       setError(err)
     } finally {
@@ -69,68 +73,73 @@ export default function AnamnesisStep() {
   if (!questions) return error ? <ErrorList error={error} /> : <div className="boot">Carregando…</div>
 
   return (
-    <div className="card anamnesis">
-      <div className="card-title">
-        <ClipboardList size={18} /> Anamnese
-        <span className="sub">
-          {answered} de {questions.length} respondidas
-        </span>
-      </div>
-      <div className="progress" aria-hidden>
-        <i style={{ width: `${(answered / questions.length) * 100}%` }} />
-      </div>
+    <>
+      <div className="card anamnesis">
+        <div className="card-title">
+          <ClipboardList size={18} /> Anamnese
+          <span className="sub">
+            {answered} de {questions.length} respondidas
+          </span>
+        </div>
+        <div className="progress" aria-hidden>
+          <i style={{ width: `${(answered / questions.length) * 100}%` }} />
+        </div>
 
-      <ErrorList error={error} />
+        <ErrorList error={error} />
 
-      {questions.map((q) => {
-        const current = answers[q.id]
-        const invalid = showMissing && current?.answer && !current.detail.trim()
-        return (
-          <div className="question" key={q.id}>
-            <div className="question-main">
-              <p>{q.text}</p>
-              <div className="yesno" role="group" aria-label={q.text}>
-                <button type="button" className="yes" aria-pressed={current?.answer === true} onClick={() => choose(q.id, true)}>
-                  Sim
-                </button>
-                <button type="button" aria-pressed={current?.answer === false} onClick={() => choose(q.id, false)}>
-                  Não
-                </button>
+        {questions.map((q) => {
+          const current = answers[q.id]
+          const invalid = showMissing && current?.answer && !current.detail.trim()
+          return (
+            <div className="question" key={q.id}>
+              <div className="question-main">
+                <p>{q.text}</p>
+                <div className="yesno" role="group" aria-label={q.text}>
+                  <button type="button" className="yes" aria-pressed={current?.answer === true} onClick={() => choose(q.id, true)}>
+                    Sim
+                  </button>
+                  <button type="button" aria-pressed={current?.answer === false} onClick={() => choose(q.id, false)}>
+                    Não
+                  </button>
+                </div>
               </div>
+              {current?.answer && (
+                <input
+                  className={`input detail ${invalid ? 'invalid' : ''}`}
+                  placeholder={q.detail_prompt}
+                  aria-label={`${q.text} — ${q.detail_prompt}`}
+                  value={current.detail}
+                  maxLength={500}
+                  onChange={(e) => describe(q.id, e.target.value)}
+                />
+              )}
             </div>
-            {current?.answer && (
-              <input
-                className={`input detail ${invalid ? 'invalid' : ''}`}
-                placeholder={q.detail_prompt}
-                aria-label={`${q.text} — ${q.detail_prompt}`}
-                value={current.detail}
-                maxLength={500}
-                onChange={(e) => describe(q.id, e.target.value)}
-              />
-            )}
-          </div>
-        )
-      })}
+          )
+        })}
 
-      <label className="field" style={{ marginTop: 14 }}>
-        <span>Observações gerais</span>
-        <textarea className="input" value={notes} onChange={(e) => setNotes(e.target.value)} />
-      </label>
+        <label className="field" style={{ marginTop: 14 }}>
+          <span>Observações gerais</span>
+          <textarea className="input" value={notes} onChange={(e) => setNotes(e.target.value)} />
+        </label>
 
-      <div className="save-bar">
-        <button className="btn primary" onClick={save} disabled={busy}>
-          {busy ? 'Salvando…' : 'Salvar anamnese'}
-        </button>
-        {savedAt && (
-          <>
-            <button className="btn" onClick={() => navigate('../planejamento')}>
-              Ir para o planejamento
-            </button>
-            <span className="hint">Salva em {new Date(savedAt).toLocaleString('pt-BR')}</span>
-          </>
-        )}
+        <div className="save-bar">
+          <button className="btn primary" onClick={save} disabled={busy}>
+            {busy ? 'Salvando…' : 'Salvar anamnese'}
+          </button>
+          {savedAt && (
+            <>
+              <button className="btn" onClick={() => navigate('../planejamento')}>
+                Ir para o planejamento
+              </button>
+              <span className="hint">
+                Versão {version}, salva em {new Date(savedAt).toLocaleString('pt-BR')}
+              </span>
+            </>
+          )}
+        </div>
+        {toastNode}
       </div>
-      {toastNode}
-    </div>
+      {version && <AnamnesisHistory patientId={patient.id} current={version} />}
+    </>
   )
 }

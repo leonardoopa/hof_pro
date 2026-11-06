@@ -2,11 +2,11 @@ from django.db import transaction
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from apps.accounts.models import User
-from apps.clinical.models import Anamnesis, AnamnesisAnswer, AnamnesisQuestion
+from apps.clinical.models import Anamnesis, AnamnesisAnswer, AnamnesisQuestion, AnamnesisVersion
 
 from ..deps import current_user, get_patient_or_404
 from ..orm import orm
-from ..schemas import AnamnesisIn, AnamnesisOut, AnswerOut, QuestionOut
+from ..schemas import AnamnesisIn, AnamnesisOut, AnamnesisVersionOut, AnswerOut, QuestionOut, VersionAnswerOut
 
 router = APIRouter(tags=["anamnese"])
 
@@ -19,11 +19,12 @@ def list_questions(user: User = Depends(current_user)):
 
 def _out(anamnesis: Anamnesis | None) -> AnamnesisOut:
     if anamnesis is None:
-        return AnamnesisOut(answers=[], notes="", updated_at=None)
+        return AnamnesisOut(answers=[], notes="", updated_at=None, version=None)
     return AnamnesisOut(
         answers=[AnswerOut.model_validate(a) for a in anamnesis.answers.all()],
         notes=anamnesis.notes,
         updated_at=anamnesis.updated_at,
+        version=anamnesis.versions.values_list("number", flat=True).first(),
     )
 
 
@@ -54,18 +55,34 @@ def save_anamnesis(patient_id: int, data: AnamnesisIn, user: User = Depends(curr
             [f"Descreva a resposta: {text}" for text in missing_detail],
         )
 
+    answers = {a.question_id: (a.answer, a.detail.strip() if a.answer else "") for a in data.answers}
     with transaction.atomic():
-        anamnesis, _ = Anamnesis.objects.get_or_create(patient=patient)
-        anamnesis.notes = data.notes
-        anamnesis.save()
-        anamnesis.answers.all().delete()
-        AnamnesisAnswer.objects.bulk_create(
-            AnamnesisAnswer(
-                anamnesis=anamnesis,
-                question_id=a.question_id,
-                answer=a.answer,
-                detail=a.detail.strip() if a.answer else "",
+        anamnesis, created = Anamnesis.objects.get_or_create(patient=patient)
+        current = {a.question_id: (a.answer, a.detail) for a in anamnesis.answers.all()}
+        if created or data.notes != anamnesis.notes or answers != current:
+            anamnesis.notes = data.notes
+            anamnesis.save()  # o UPDATE trava a linha: dois salvamentos ao mesmo tempo não pegam o mesmo número de versão
+            anamnesis.answers.all().delete()
+            AnamnesisAnswer.objects.bulk_create(
+                AnamnesisAnswer(anamnesis=anamnesis, question_id=question_id, answer=answer, detail=detail)
+                for question_id, (answer, detail) in answers.items()
             )
-            for a in data.answers
-        )
+            anamnesis.record_version(user)
     return _out(anamnesis)
+
+
+@router.get("/patients/{patient_id}/anamnesis/versions", response_model=list[AnamnesisVersionOut])
+@orm
+def list_versions(patient_id: int, user: User = Depends(current_user)):
+    patient = get_patient_or_404(user, patient_id)
+    versions = AnamnesisVersion.objects.filter(anamnesis__patient=patient).select_related("saved_by").prefetch_related("answers")
+    return [
+        AnamnesisVersionOut(
+            number=v.number,
+            notes=v.notes,
+            saved_by=str(v.saved_by),
+            saved_at=v.saved_at,
+            answers=[VersionAnswerOut.model_validate(a) for a in v.answers.all()],
+        )
+        for v in versions
+    ]

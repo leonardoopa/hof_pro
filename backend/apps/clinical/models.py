@@ -23,9 +23,28 @@ class AnamnesisQuestion(models.Model):
 
 
 class Anamnesis(models.Model):
+    """O estado atual, que as telas leem. Cada alteração salva também fica em AnamnesisVersion."""
+
     patient = models.OneToOneField(Patient, on_delete=models.CASCADE, related_name="anamnesis")
     notes = models.TextField(blank=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def record_version(self, saved_by) -> None:
+        """Guarda o estado atual como nova versão. Chamar depois de gravar notas e respostas."""
+        last = self.versions.first()
+        version = AnamnesisVersion.objects.create(
+            anamnesis=self,
+            number=last.number + 1 if last else 1,
+            notes=self.notes,
+            saved_by=saved_by,
+            saved_at=self.updated_at,
+        )
+        AnamnesisVersionAnswer.objects.bulk_create(
+            AnamnesisVersionAnswer(
+                version=version, question_id=a.question_id, question_text=a.question.text, answer=a.answer, detail=a.detail
+            )
+            for a in self.answers.select_related("question")
+        )
 
 
 class AnamnesisAnswer(models.Model):
@@ -36,6 +55,32 @@ class AnamnesisAnswer(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["anamnesis", "question"], name="uniq_answer_per_question")]
+
+
+class AnamnesisVersion(models.Model):
+    """Uma linha por alteração salva. Nada reescreve estas linhas; o sistema só acrescenta."""
+
+    anamnesis = models.ForeignKey(Anamnesis, on_delete=models.PROTECT, related_name="versions")
+    number = models.PositiveIntegerField("versão")
+    notes = models.TextField(blank=True)
+    saved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="+")
+    saved_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ["-number"]
+        constraints = [models.UniqueConstraint(fields=["anamnesis", "number"], name="uniq_anamnesis_version")]
+
+
+class AnamnesisVersionAnswer(models.Model):
+    version = models.ForeignKey(AnamnesisVersion, on_delete=models.PROTECT, related_name="answers")
+    question = models.ForeignKey(AnamnesisQuestion, on_delete=models.PROTECT, related_name="+")
+    # Texto como foi perguntado: a pergunta pode ser reescrita no admin depois.
+    question_text = models.CharField(max_length=255)
+    answer = models.BooleanField()
+    detail = models.CharField(max_length=500, blank=True)
+
+    class Meta:
+        ordering = ["question__order", "question_id"]
 
 
 class Region(models.TextChoices):
