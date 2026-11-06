@@ -188,12 +188,13 @@ button {
 
 @media (max-width: 860px) {
   .shell {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .sidebar {
     position: static;
     height: auto;
     flex-direction: row;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--space-3);
     padding: var(--space-3) var(--space-4);
@@ -218,6 +219,14 @@ button {
   }
   .main {
     padding-top: var(--space-5);
+  }
+}
+@media (max-width: 430px) {
+  .sidebar-user .avatar {
+    display: none;
+  }
+  .nav a {
+    padding-inline: var(--space-2);
   }
 }
 
@@ -329,6 +338,10 @@ button {
   border-radius: var(--radius-sm);
   background: var(--surface-soft);
   transition: border-color var(--dur), background var(--dur);
+}
+.input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 .input:focus {
   outline: none;
