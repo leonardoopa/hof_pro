@@ -380,6 +380,7 @@ textarea.input {
 .alert {
   padding: 11px 14px;
   margin-bottom: 14px;
+  scroll-margin: var(--space-4);
   border-radius: var(--radius-sm);
   font-size: var(--text-md);
 }

@@ -35,7 +35,7 @@ test('anamnese: "Sim" exige descrição e depois salva', async ({ page }) => {
 
   await page.getByRole('group', { name: question.text }).getByRole('button', { name: 'Sim' }).click()
   await page.getByRole('button', { name: 'Salvar anamnese' }).click()
-  await expect(page.getByText('Descreva a resposta de todas as perguntas')).toBeVisible()
+  await expect(page.getByText('Descreva a resposta de todas as perguntas')).toBeInViewport()
 
   await page.getByLabel(`${question.text} — ${question.detail_prompt}`).fill('Alergia a lidocaína')
   await page.getByRole('button', { name: 'Salvar anamnese' }).click()
@@ -43,6 +43,30 @@ test('anamnese: "Sim" exige descrição e depois salva', async ({ page }) => {
   const saved = await api.get(`/patients/${patient.id}/anamnesis`)
   expect(saved.answers).toContainEqual({ question_id: question.id, answer: true, detail: 'Alergia a lidocaína' })
   expect(errors).toEqual([])
+})
+
+test('erro ao salvar: a mensagem vem para a tela, e a página só rola se precisar', async ({ page }) => {
+  const api = await signIn(page)
+  const patient = await createPatient(api)
+  await page.route(`**/api/patients/${patient.id}/anamnesis`, (route) =>
+    route.request().method() === 'PUT' ? route.fulfill({ status: 500, json: { detail: 'Falha simulada' } }) : route.continue(),
+  )
+  await page.goto(`/pacientes/${patient.id}/anamnese`)
+  const save = page.getByRole('button', { name: 'Salvar anamnese' })
+  const message = page.getByRole('alert').filter({ hasText: 'Falha simulada' })
+
+  // Clique pelo DOM, que não rola até o botão: a mensagem nasce na tela e nada se mexe.
+  await expect(save).toBeVisible()
+  await page.evaluate(() => window.scrollTo(0, 100))
+  await save.evaluate((button) => button.click())
+  await expect(message).toBeInViewport()
+  expect(await page.evaluate(() => window.scrollY)).toBe(100)
+
+  // Com o botão no fim da página, a mensagem fica fora da tela até o erro voltar.
+  await save.scrollIntoViewIfNeeded()
+  await expect(message).not.toBeInViewport()
+  await save.click()
+  await expect(message).toBeInViewport()
 })
 
 test('anamnese: cada alteração salva vira uma versão e as anteriores continuam lá', async ({ page }) => {
