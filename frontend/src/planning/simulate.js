@@ -1,6 +1,7 @@
 // Pré-visualização ilustrativa feita no navegador. Não é um modelo clínico nem generativo:
 //  - toxina (U): suaviza a pele ao redor do ponto (efeito de relaxamento das linhas), sem borrar sobrancelha nem olho;
 //  - produtos em ml: abaulamento local (efeito de volume), limitado para não distorcer o rosto;
+//  - sulcos (olheira, nasolabial, marionete, pré-jowl): produto em ml clareia o vinco, porque o abaulamento o empurraria;
 //  - boca: preenchimento/bioestimulador aumenta o volume do lábio (elipse horizontal, leve realce de cor);
 //    toxina/skinbooster suaviza as linhas periorais ("código de barras").
 // A intensidade cresce com a quantidade planejada.
@@ -16,6 +17,14 @@ const VOLUME_GAIN = { preenchimento: 1, bioestimulador: 0.6, skinbooster: 0.3, o
 
 // Suavização: toxina em qualquer região; skinbooster só na boca (linhas periorais).
 const isSmoothing = (p) => treatmentOf(p.treatment).unit === 'U' || (p.region === 'boca' && p.treatment === 'skinbooster')
+
+const GROOVES = new Set(['olheiras', 'nasolabial', 'marionete', 'prejowl'])
+const isGroove = (p) => GROOVES.has(p.region) && !isSmoothing(p)
+
+// Quanto o pixel é mais escuro que a vizinhança, em fração do brilho dela. Até CREASE_FULL é vinco de pele e clareia por
+// inteiro; a partir de CREASE_MAX é abertura (boca, narina) e fica como está.
+const CREASE_FULL = 0.55
+const CREASE_MAX = 0.85
 
 function boxBlur(src, w, h, radius, passes = 2) {
   let a = Float32Array.from(src)
@@ -64,6 +73,16 @@ function sample(data, w, h, x, y, out) {
 
 const smooth = (t) => t * t * (3 - 2 * t)
 
+/** Percorre o disco de raio r em volta de (cx, cy). O peso vai de 1 no centro a 0 na borda. */
+function forDisc(w, h, cx, cy, r, visit) {
+  for (let y = Math.max(0, Math.floor(cy - r)); y < Math.min(h, Math.ceil(cy + r)); y++) {
+    for (let x = Math.max(0, Math.floor(cx - r)); x < Math.min(w, Math.ceil(cx + r)); x++) {
+      const d = Math.hypot(x - cx, y - cy) / r
+      if (d < 1) visit((y * w + x) * 4, smooth(1 - d))
+    }
+  }
+}
+
 export function renderSimulation(image, points) {
   const scale = Math.min(1, MAX_SIDE / Math.max(image.naturalWidth, image.naturalHeight))
   const w = Math.round(image.naturalWidth * scale)
@@ -80,32 +99,38 @@ export function renderSimulation(image, points) {
   const img = ctx.getImageData(0, 0, w, h)
   let data = img.data
 
-  // 1) suavização (toxina; skinbooster na boca)
+  // 1) suavização (toxina; skinbooster na boca) e sulcos: misturam a foto com uma versão borrada dela
   const toxin = active.filter(isSmoothing)
-  if (toxin.length) {
+  const grooves = active.filter(isGroove)
+  if (toxin.length || grooves.length) {
     const blurred = boxBlur(data, w, h, Math.max(3, Math.round(w * 0.01)), 3)
-    const source = Uint8ClampedArray.from(data) // os pontos se somam: a borda é medida sempre na foto original
+    const source = Uint8ClampedArray.from(data) // os pontos se somam: borda e vinco são medidos sempre na foto original
+    const blend = (i, k) => {
+      for (let c = 0; c < 3; c++) data[i + c] = data[i + c] * (1 - k) + blurred[i + c] * k
+    }
     for (const p of toxin) {
-      const cx = p.x * w
-      const cy = p.y * h
       const r = w * (0.06 + 0.02 * Math.sqrt(p.amount)) * (p.region === 'boca' ? 0.8 : 1)
       const strength = treatmentOf(p.treatment).unit === 'U' ? Math.min(0.92, 0.45 + 0.07 * p.amount) : Math.min(0.9, 0.5 + 0.4 * p.amount)
-      for (let y = Math.max(0, Math.floor(cy - r)); y < Math.min(h, Math.ceil(cy + r)); y++) {
-        for (let x = Math.max(0, Math.floor(cx - r)); x < Math.min(w, Math.ceil(cx + r)); x++) {
-          const d = Math.hypot(x - cx, y - cy) / r
-          if (d >= 1) continue
-          const i = (y * w + x) * 4
-          const edge = (Math.abs(source[i] - blurred[i]) + Math.abs(source[i + 1] - blurred[i + 1]) + Math.abs(source[i + 2] - blurred[i + 2])) / 3
-          const k = strength * smooth(1 - d) * Math.max(0, 1 - edge / EDGE_LIMIT)
-          for (let c = 0; c < 3; c++) data[i + c] = data[i + c] * (1 - k) + blurred[i + c] * k
-        }
-      }
+      forDisc(w, h, p.x * w, p.y * h, r, (i, weight) => {
+        const edge = (Math.abs(source[i] - blurred[i]) + Math.abs(source[i + 1] - blurred[i + 1]) + Math.abs(source[i + 2] - blurred[i + 2])) / 3
+        blend(i, strength * weight * Math.max(0, 1 - edge / EDGE_LIMIT))
+      })
+    }
+    for (const p of grooves) {
+      const r = w * (0.06 + 0.03 * Math.sqrt(p.amount))
+      const strength = Math.min(0.9, 0.35 + 0.55 * Math.sqrt(p.amount)) * (VOLUME_GAIN[p.treatment] ?? 1)
+      forDisc(w, h, p.x * w, p.y * h, r, (i, weight) => {
+        const around = blurred[i] + blurred[i + 1] + blurred[i + 2]
+        const depth = (around - source[i] - source[i + 1] - source[i + 2]) / Math.max(1, around)
+        if (depth <= 0) return // mais claro que a vizinhança não é vinco
+        blend(i, strength * weight * Math.min(1, Math.max(0, (CREASE_MAX - depth) / (CREASE_MAX - CREASE_FULL))))
+      })
     }
   }
 
   // 2) volume (preenchimento, bioestimulador, skinbooster, outro)
   const out = [0, 0, 0]
-  for (const p of active.filter((q) => !isSmoothing(q))) {
+  for (const p of active.filter((q) => !isSmoothing(q) && !isGroove(q))) {
     const lips = p.region === 'boca'
     const cx = p.x * w
     const cy = p.y * h
