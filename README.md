@@ -66,7 +66,7 @@ Testes:
 
 - **Login e cadastro** por e-mail e senha (JWT, 12 h). Cada profissional só enxerga os próprios pacientes.
 - **Pacientes**: lista com busca, cadastro, arquivamento e ocultação de dados. Nada é apagado.
-- **Anamnese**: 15 perguntas sim/não semeadas por migration (editáveis no admin Django). "Sim" exige descrição. Cada alteração salva vira uma versão que não muda mais, com autor, data e a pergunta como foi feita; a tela mostra o histórico e o que mudou em cada versão. Anamnese salva antes deste recurso começa na versão 1, com o estado em que estava: o que já tinha sido sobrescrito não volta.
+- **Anamnese**: 15 perguntas sim/não semeadas por migration (editáveis no admin Django). "Sim" exige descrição. Cada alteração salva vira uma versão que não muda mais, com autor, data e a pergunta como foi feita; a tela mostra o histórico e o que mudou em cada versão. Anamnese salva antes deste recurso começa na versão 1, com o estado em que estava: o que já tinha sido sobrescrito não volta. Pergunta desativada sai do formulário, e a resposta já dada segue guardada e visível no histórico.
 - **Planejamento facial**:
   - foto frontal pela câmera ou por upload;
   - o MediaPipe detecta o rosto no navegador e posiciona os pontos sugeridos em 19 regiões:
