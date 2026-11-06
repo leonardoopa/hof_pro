@@ -4,6 +4,7 @@ import { api } from '../api/client'
 import ConfirmModal from '../components/ConfirmModal'
 import ErrorList from '../components/ErrorList'
 import Modal from '../components/Modal'
+import { parseAmount } from '../planning/regions'
 import { fmtDate } from '../planning/technique'
 
 const KINDS = [
@@ -146,7 +147,7 @@ function LotModal({ products, onClose, onSaved }) {
     setBusy(true)
     setError(null)
     try {
-      onSaved(await api.inventory.createLot({ ...form, product_id: Number(form.product_id), quantity: Number(form.quantity) }))
+      onSaved(await api.inventory.createLot({ ...form, product_id: Number(form.product_id), quantity: parseAmount(form.quantity) }))
     } catch (err) {
       setError(err)
       setBusy(false)
@@ -179,7 +180,7 @@ function LotModal({ products, onClose, onSaved }) {
         </div>
         <label className="field">
           <span>Quantidade ({unit})</span>
-          <input className="input" type="number" min="0.01" step="0.01" value={form.quantity} onChange={set('quantity')} required />
+          <input className="input" inputMode="decimal" pattern="\d+([.,]\d{1,2})?" title="Até duas casas decimais, ex.: 12,5" value={form.quantity} onChange={set('quantity')} required />
         </label>
         <div className="modal-actions">
           <button type="button" className="btn" onClick={onClose}>

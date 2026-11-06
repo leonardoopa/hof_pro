@@ -17,6 +17,7 @@ import {
   assignSides,
   describeTotals,
   formatAmount,
+  parseAmount,
   pointLabel,
   regionLabel,
   regionOf,
@@ -48,6 +49,39 @@ const DETECT_NOTE = {
   found: 'Pontos ajustados ao rosto. Arraste para refinar.',
   fallback: 'Rosto não detectado: pontos na posição padrão. Arraste para ajustar.',
   error: 'Detecção indisponível (sem conexão?): pontos na posição padrão. Arraste para ajustar.',
+}
+
+const clampAmount = (n) => clamp(round2(n), 0, 200)
+
+/**
+ * Quantidade de um ponto. É campo de texto de propósito: input type=number descarta a vírgula em navegador fora
+ * de pt-BR, e "0,3" viraria 3, dose dez vezes maior.
+ */
+function AmountField({ value, onChange, onStep, ...props }) {
+  const [draft, setDraft] = useState(null) // texto em digitação; null = mostra a quantidade guardada
+  return (
+    <input
+      {...props}
+      className="input mini"
+      inputMode="decimal"
+      autoComplete="off"
+      value={draft ?? formatAmount(value)}
+      onChange={(e) => {
+        const text = e.target.value.replace(/[^\d.,-]/g, '')
+        const typed = parseAmount(text)
+        const amount = clampAmount(typed)
+        setDraft(typed === amount ? text : null) // fora do limite ou com casas demais: mostra o que ficou valendo
+        onChange(amount)
+      }}
+      onBlur={() => setDraft(null)}
+      onKeyDown={(e) => {
+        if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return
+        e.preventDefault()
+        setDraft(null)
+        onStep(e.key === 'ArrowUp' ? 1 : -1)
+      }}
+    />
+  )
 }
 
 export default function PlanningStep() {
@@ -164,7 +198,9 @@ export default function PlanningStep() {
         )
         setPoints(loaded)
         setDetect('idle')
-        fillMissingRegions(img, loaded, token)
+        // Só plano salvo antes dos nomes de ponto (point_key) tem região faltando por ser antigo. Com nomes, ele nasceu
+        // com o catálogo inteiro e região vazia é escolha do profissional.
+        if (!loaded.some((p) => p.point_key)) fillMissingRegions(img, loaded, token)
       } else {
         placeAutomatically(img) // em segundo plano: a foto já aparece enquanto o modelo carrega
       }
@@ -208,6 +244,12 @@ export default function PlanningStep() {
     window.addEventListener('beforeunload', warn)
     return () => window.removeEventListener('beforeunload', warn)
   }, [dirty])
+
+  // Em uma coluna (tablet, celular) a lista fica abaixo da foto: ao abrir uma região, mostra a foto ampliada.
+  const toolbarRef = useRef(null)
+  useEffect(() => {
+    if (zone && window.matchMedia('(max-width: 1100px)').matches) toolbarRef.current?.scrollIntoView({ block: 'start' })
+  }, [zone?.region])
 
   // ---- simulação ----
   useEffect(() => {
@@ -256,17 +298,13 @@ export default function PlanningStep() {
           return { ...p, treatment: t.key, amount: t.initial }
         }
         const t = treatmentOf(p.treatment)
-        return { ...p, amount: clamp(round2(p.amount + direction * t.step), 0, 200) }
+        return { ...p, amount: clampAmount(p.amount + direction * t.step) }
       }),
     )
 
-  const typeAmount = (id, raw) =>
+  const typeAmount = (id, amount) =>
     edit((ps) =>
-      ps.map((p) => {
-        if (p.uid !== id) return p
-        const amount = clamp(round2(parseFloat(raw) || 0), 0, 200)
-        return { ...p, amount, treatment: p.amount === 0 && amount > 0 ? treatment : p.treatment }
-      }),
+      ps.map((p) => (p.uid === id ? { ...p, amount, treatment: p.amount === 0 && amount > 0 ? treatment : p.treatment } : p)),
     )
 
   const movePoint = (id, x, y) => patchPoint(id, { x, y })
@@ -301,6 +339,8 @@ export default function PlanningStep() {
     if (showMarks) {
       setSimChoice(true) // sem os pontos na frente, mostra o resultado simulado
       setAdding(false)
+    } else {
+      setSimChoice(null) // pontos de volta: a simulação volta a seguir as quantidades
     }
     setShowMarks(!showMarks)
   }
@@ -427,7 +467,7 @@ export default function PlanningStep() {
   )
 
   return (
-    <div className="planning">
+    <div className={`planning ${zone ? 'zoomed' : ''}`}>
       <section className="card stage-card">
         <div className="card-title">
           <ScanFace size={18} /> Planejamento facial
@@ -473,7 +513,7 @@ export default function PlanningStep() {
         ) : (
           <>
             {zone && (
-              <div className="stage-toolbar">
+              <div ref={toolbarRef} className="stage-toolbar">
                 <button className="btn small" onClick={closeRegion}>
                   <ChevronLeft size={15} /> Todas as regiões
                 </button>
@@ -489,6 +529,7 @@ export default function PlanningStep() {
                 )}
                 <button
                   className={`btn small ${adding ? 'primary' : ''}`}
+                  disabled={applied}
                   onClick={() => {
                     setShowMarks(true) // o ponto novo precisa aparecer
                     setAdding(!adding)
@@ -507,7 +548,8 @@ export default function PlanningStep() {
               selectedId={selected}
               hoverRegion={hoverRegion}
               suggested={suggested}
-              adding={adding}
+              adding={adding && !applied}
+              readOnly={applied}
               simUrl={compare ? simUrl : null}
               split={split}
               showMarks={showMarks}
@@ -540,10 +582,10 @@ export default function PlanningStep() {
                 </label>
               )}
               <span className="spacer" />
-              <button className="btn ghost small" onClick={() => setCamera(true)} disabled={busy}>
+              <button className="btn ghost small" onClick={() => setCamera(true)} disabled={busy || applied}>
                 <Camera size={15} /> Nova foto
               </button>
-              <button className="btn ghost small" onClick={() => fileInput.current.click()} disabled={busy}>
+              <button className="btn ghost small" onClick={() => fileInput.current.click()} disabled={busy || applied}>
                 <Upload size={15} /> Trocar foto
               </button>
             </div>
@@ -599,7 +641,7 @@ export default function PlanningStep() {
         </section>
 
         {image && (
-          <section className="card">
+          <section className="card regions-card">
             {!zone ? (
               <>
                 <div className="card-title">Regiões</div>
@@ -639,7 +681,7 @@ export default function PlanningStep() {
                     <AlertTriangle size={14} /> {regionOf(zone.region).risk}
                   </p>
                 )}
-                <div className="point-list">
+                <fieldset className="point-list" disabled={applied}>
                   {zonePoints.map((p, index) => {
                     const t = treatmentOf(p.treatment)
                     const name = pointLabel(p.region, p.point_key)
@@ -653,14 +695,16 @@ export default function PlanningStep() {
                         <select
                           className="input mini"
                           value={p.treatment}
-                          onChange={(e) =>
+                          onChange={(e) => {
+                            // Ponto zerado recebe o tratamento ativo ao ganhar quantidade: o ativo acompanha a escolha feita aqui.
+                            if (p.amount === 0) setTreatment(e.target.value)
                             patchPoint(
                               p.uid,
                               UNIT_BY_TREATMENT[e.target.value] === UNIT_BY_TREATMENT[p.treatment]
                                 ? { treatment: e.target.value }
                                 : { treatment: e.target.value, lot_id: null },
                             )
-                          }
+                          }}
                           aria-label={`Tratamento do ponto ${index + 1}`}
                         >
                           {TREATMENTS.map((opt) => (
@@ -673,15 +717,10 @@ export default function PlanningStep() {
                           <button className="icon-btn" onClick={() => stepAmount(p.uid, -1)} disabled={p.amount <= 0} aria-label="Diminuir">
                             <Minus size={14} />
                           </button>
-                          <input
-                            className="input mini"
-                            type="number"
-                            inputMode="decimal"
-                            min="0"
-                            max="200"
-                            step={t.step}
+                          <AmountField
                             value={p.amount}
-                            onChange={(e) => typeAmount(p.uid, e.target.value)}
+                            onChange={(amount) => typeAmount(p.uid, amount)}
+                            onStep={(direction) => stepAmount(p.uid, direction)}
                             aria-label={`Quantidade do ponto ${index + 1} em ${t.unit}`}
                           />
                           <span className="unit">{t.unit}</span>
@@ -738,7 +777,7 @@ export default function PlanningStep() {
                     )
                   })}
                   {!zonePoints.length && <p className="note">Nenhum ponto nesta região. Use “Adicionar ponto”.</p>}
-                </div>
+                </fieldset>
               </>
             )}
           </section>
@@ -750,6 +789,7 @@ export default function PlanningStep() {
           <div className="card-title">Observações</div>
           <textarea
             className="input"
+            disabled={applied}
             placeholder="Ex.: assimetria leve em malar direito. Paciente relata bruxismo."
             value={notes}
             onChange={(e) => {

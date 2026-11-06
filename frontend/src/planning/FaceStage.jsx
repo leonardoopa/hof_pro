@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { fitLabels, spreadHotspots } from './layout'
 import { REGIONS, SIDE_LABEL, describeTotals, pointLabel, regionLabel, totalsOf, treatmentOf, formatAmount } from './regions'
 
@@ -39,6 +39,7 @@ export default function FaceStage({
   hoverRegion,
   suggested = [],
   adding,
+  readOnly = false,
   simUrl,
   split,
   showMarks = true,
@@ -50,7 +51,9 @@ export default function FaceStage({
 }) {
   const innerRef = useRef(null)
   const dragging = useRef(null)
-  const { s, tx, ty } = viewFor(points, zone)
+  // O enquadramento só muda ao trocar de região ou de número de pontos: recalcular a cada arraste tiraria o ponto de baixo do cursor.
+  const zoneCount = zone ? points.filter((p) => inZone(p, zone)).length : 0
+  const { s, tx, ty } = useMemo(() => viewFor(points, zone), [zone?.region, zone?.side, zoneCount])
 
   // Tamanho do palco em px: o layout dos hotspots mede distâncias na tela, não na foto.
   const stageRef = useRef(null)
@@ -86,7 +89,7 @@ export default function FaceStage({
         return { ...g, ...centroid(g.pts), total: totalsOf(g.pts), shortName: g.side === 'C' ? short : `${short} ${g.side}` }
       })
   const spots = spreadHotspots(groups, size)
-  const showLabel = fitLabels(
+  const labelPlace = fitLabels(
     groups.map((g, i) => ({
       ...spots[i],
       side: g.side,
@@ -99,7 +102,7 @@ export default function FaceStage({
   return (
     <div
       ref={stageRef}
-      className={`stage ${adding ? 'adding' : ''}`}
+      className={`stage ${adding ? 'adding' : ''} ${readOnly ? 'read-only' : ''}`}
       style={{ '--aspect': aspect }}
       onClick={(e) => {
         if (!adding || !zone || e.target.closest('.pt')) return
@@ -140,7 +143,7 @@ export default function FaceStage({
             <button
               key={`${key}-${side}`}
               type="button"
-              className={`hotspot side-${side} ${hoverRegion === key ? 'hover' : ''} ${total.areas ? 'filled' : ''} ${showLabel[i] ? 'show-label' : ''} ${suggested.includes(key) ? 'suggest' : ''}`}
+              className={`hotspot side-${side} ${hoverRegion === key ? 'hover' : ''} ${total.areas ? 'filled' : ''} ${labelPlace[i] ? `show-label label-${labelPlace[i]}` : ''} ${suggested.includes(key) ? 'suggest' : ''}`}
               style={{ left: `${spots[i].x * 100}%`, top: `${spots[i].y * 100}%` }}
               onClick={() => onPickRegion(key, side)}
               onMouseEnter={() => onHoverRegion(key)}
@@ -175,9 +178,10 @@ export default function FaceStage({
             title={pointLabel(p.region, p.point_key) || undefined}
             aria-label={`${regionLabel(p.region)}, ${pointLabel(p.region, p.point_key) || `ponto ${index + 1}`}: ${formatAmount(p.amount)} ${treatmentOf(p.treatment).unit}`}
             onPointerDown={(e) => {
+              onSelectPoint(p.uid)
+              if (readOnly) return
               e.currentTarget.setPointerCapture(e.pointerId)
               dragging.current = p.uid
-              onSelectPoint(p.uid)
             }}
             onPointerMove={(e) => {
               if (dragging.current !== p.uid) return
