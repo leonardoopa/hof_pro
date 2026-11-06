@@ -109,6 +109,7 @@ export default function EvolutionPage() {
     try {
       const meta = await api.photos.upload(patient.id, file, uploadKind)
       setPhotos((list) => [meta, ...(list ?? [])])
+      setBeforeId((id) => id ?? afterId) // até aqui só havia uma foto: ela vira o "antes"
       setAfterId(meta.id) // a foto nova entra como "depois"
       toast('Foto adicionada.')
     } catch (err) {
