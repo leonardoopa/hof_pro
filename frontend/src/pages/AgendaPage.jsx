@@ -1,11 +1,12 @@
 import { ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api/client'
 import ErrorList from '../components/ErrorList'
 import Modal from '../components/Modal'
 
-const HOURS = Array.from({ length: 14 }, (_, i) => i + 7) // 07h às 20h
+const DEFAULT_FROM = 7 // grade padrão 07h–20h; estende se houver agendamento fora dela
+const DEFAULT_TO = 20
 const ROW = 48
 const STATUS = { agendado: 'Agendado', confirmado: 'Confirmado', realizado: 'Realizado', cancelado: 'Cancelado', faltou: 'Faltou' }
 
@@ -145,22 +146,41 @@ export default function AgendaPage() {
   const [patients, setPatients] = useState([])
   const [error, setError] = useState(null)
   const [editing, setEditing] = useState(null)
+  const [reload, setReload] = useState(0)
+  const [showCanceled, setShowCanceled] = useState(false)
 
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(start, i)), [start])
 
-  const load = useCallback(() => {
-    api.appointments.list(iso(days[0]), iso(days[6])).then((r) => { setItems(r); setError(null) }).catch(setError)
-  }, [days])
-
-  useEffect(load, [load])
+  useEffect(() => {
+    let stale = false // navegação rápida entre semanas: ignora a resposta antiga
+    api.appointments
+      .list(iso(days[0]), iso(days[6]))
+      .then((r) => { if (!stale) { setItems(r); setError(null) } })
+      .catch((e) => { if (!stale) setError(e) })
+    return () => { stale = true }
+  }, [days, reload])
   useEffect(() => { api.patients.list().then(setPatients).catch(() => {}) }, [])
 
   const openNew = (day, hour) => {
     const s = new Date(day.getFullYear(), day.getMonth(), day.getDate(), hour)
     setEditing({ starts_at: s.toISOString(), ends_at: new Date(s.getTime() + 3_600_000).toISOString() })
   }
-  const saved = () => { setEditing(null); load() }
+  const saved = () => { setEditing(null); setReload((n) => n + 1) }
   const todayIso = iso(new Date())
+  const visible = useMemo(
+    () => (items ?? []).filter((a) => showCanceled || a.status !== 'cancelado'),
+    [items, showCanceled],
+  )
+  const hours = useMemo(() => {
+    let from = DEFAULT_FROM
+    let to = DEFAULT_TO
+    for (const a of visible) {
+      from = Math.min(from, new Date(a.starts_at).getHours())
+      to = Math.max(to, new Date(a.starts_at).getHours())
+    }
+    return Array.from({ length: to - from + 1 }, (_, i) => i + from)
+  }, [visible])
+  const canceledCount = (items ?? []).filter((a) => a.status === 'cancelado').length
   const title = `${days[0].toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })} – ${days[6].toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}`
 
   return (
@@ -180,6 +200,10 @@ export default function AgendaPage() {
         <button className="btn small" onClick={() => setStart(weekStart(new Date()))}>Hoje</button>
         <button className="btn small" onClick={() => setStart(addDays(start, 7))} aria-label="Próxima semana"><ChevronRight size={16} /></button>
         <h2>{title}</h2>
+        <label className="agenda-toggle">
+          <input type="checkbox" checked={showCanceled} onChange={(e) => setShowCanceled(e.target.checked)} />
+          Mostrar cancelados{canceledCount > 0 ? ` (${canceledCount})` : ''}
+        </label>
       </div>
       {items === null && !error && <p className="report-empty">Carregando…</p>}
       <div className="agenda-scroll">
@@ -190,8 +214,8 @@ export default function AgendaPage() {
               {d.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit' })}
             </div>
           ))}
-          {HOURS.map((h) => (
-            <Row key={h} hour={h} days={days} items={items ?? []} onNew={openNew} onOpen={setEditing} />
+          {hours.map((h) => (
+            <Row key={h} hour={h} days={days} items={visible} onNew={openNew} onOpen={setEditing} />
           ))}
         </div>
       </div>
@@ -210,15 +234,15 @@ function Row({ hour, days, items, onNew, onOpen }) {
           return iso(s) === iso(d) && s.getHours() === hour
         })
         return (
-          <div key={iso(d)} className="agenda-cell" role="button" tabIndex={0} aria-label={`Agendar ${iso(d)} ${hour}h`}
-            onClick={() => onNew(d, hour)} onKeyDown={(e) => e.key === 'Enter' && onNew(d, hour)}>
+          <div key={iso(d)} className="agenda-cell">
+            <button type="button" className="agenda-slot" aria-label={`Agendar ${iso(d)} às ${hour}h`} onClick={() => onNew(d, hour)} />
             {here.map((a) => {
               const s = new Date(a.starts_at)
               const mins = (new Date(a.ends_at) - s) / 60_000
               return (
                 <button key={a.id} className={`agenda-appt ${a.status}`}
                   style={{ top: (s.getMinutes() / 60) * ROW, height: Math.max(20, (mins / 60) * ROW - 2) }}
-                  onClick={(e) => { e.stopPropagation(); onOpen(a) }}>
+                  onClick={() => onOpen(a)}>
                   {a.patient_name || a.lead_name}
                   <small>{hhmm(s)} · {a.kind || STATUS[a.status]}{!a.patient_id ? ' · novo' : ''}</small>
                 </button>

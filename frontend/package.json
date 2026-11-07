@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node src/planning/symmetry.check.mjs && node src/planning/template.check.mjs && node src/planning/layout.check.mjs && node src/pages/anamnesisVersions.check.mjs",
+    "test": "node src/planning/symmetry.check.mjs && node src/planning/template.check.mjs && node src/planning/layout.check.mjs && node src/pages/anamnesisVersions.check.mjs && node src/pages/csv.check.mjs",
     "test:e2e": "playwright test"
   },
   "dependencies": {

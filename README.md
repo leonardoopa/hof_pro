@@ -103,10 +103,12 @@ Testes:
 
 ## Decisões da agenda e do relatório mensal
 
-- Agendamento nunca é apagado: cancelar muda o status, e agendamento cancelado não ocupa o horário (reativar exige o horário livre). O conflito é por profissional.
+- Agendamento nunca é apagado: cancelar muda o status, e agendamento cancelado não ocupa o horário (reativar exige o horário livre). O conflito é por profissional. Criar, editar e mudar status travam o profissional (`select_for_update`) dentro da transação antes de checar o conflito, para dois pedidos simultâneos não duplicarem o horário no SQL Server. O SQLite ignora o bloqueio, e não há teste de concorrência real.
 - Novo paciente é um "lead" (nome e telefone no próprio agendamento); "Cadastrar como paciente" cria o cadastro e vincula. Não há checagem de duplicidade com pacientes existentes.
-- Agenda semanal de 07h às 20h, sem recorrência, sem lembretes e sem integração com calendário externo.
-- O relatório mensal reaproveita a consulta de `/reports/usage`; o consumo de produto inclui aplicações de pacientes com dados ocultos (estoque não expõe dado pessoal), mas a lista de pacientes não.
+- Agenda semanal de 07h às 20h (a grade se estende sozinha se houver agendamento fora da faixa; cancelados ficam ocultos até marcar "Mostrar cancelados"), sem recorrência, sem lembretes e sem integração com calendário externo.
+- O relatório mensal reaproveita a consulta de `/reports/usage`; o consumo de produto inclui aplicações de pacientes com dados ocultos (estoque não expõe dado pessoal), mas a lista de pacientes não (a tela avisa).
+- Todo CSV exportado neutraliza texto que começa com `=`, `+`, `-` ou `@` (apóstrofo na frente), para o Excel não executar como fórmula.
+- Pendente (LGPD): nome e telefone do lead ficam em texto puro até a conversão, e listar agendamentos não grava log de acesso.
 
 ## Próximos passos
 
