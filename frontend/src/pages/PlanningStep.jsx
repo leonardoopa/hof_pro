@@ -1,4 +1,4 @@
-import { AlertTriangle, Camera, CheckCheck, ChevronLeft, Crosshair, Eye, EyeOff, Minus, PackagePlus, Plus, Save, ScanFace, Smile, Sparkles, Trash2, Upload, Wand2 } from 'lucide-react'
+import { AlertTriangle, Camera, Check, CheckCheck, ChevronLeft, Eye, EyeOff, MousePointerClick, Minus, PackagePlus, Plus, Save, ScanFace, Smile, Sparkles, Trash2, Upload, Wand2 } from 'lucide-react'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useOutletContext } from 'react-router-dom'
 import { api } from '../api/client'
@@ -138,6 +138,25 @@ export default function PlanningStep() {
     return landmarkCache.current.get(img)
   }, [])
 
+  // Posição sugerida de cada região na imagem atual: tocar no rosto abre a região mais próxima, e a região vazia também
+  // amplia. Na foto, a detecção refina as posições quando terminar; até lá, ou sem detecção, vale a posição padrão.
+  const [template, setTemplate] = useState([])
+  useEffect(() => {
+    if (!image) {
+      setTemplate([])
+      return
+    }
+    setTemplate(fallbackTemplate())
+    if (image.isModel) return
+    let alive = true
+    getLandmarks(image)
+      .then((landmarks) => alive && landmarks && setTemplate(buildTemplate(landmarks, image.naturalWidth, image.naturalHeight)))
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [image, getLandmarks])
+
   const placeToken = useRef(0)
   const placeAutomatically = useCallback(async (img) => {
     const token = ++placeToken.current // ignora o resultado se outra foto entrou no lugar
@@ -262,11 +281,33 @@ export default function PlanningStep() {
     return () => window.removeEventListener('beforeunload', warn)
   }, [dirty])
 
-  // Em uma coluna (tablet, celular) a lista fica abaixo da foto: ao abrir uma região, mostra a foto ampliada.
-  const toolbarRef = useRef(null)
+  // Esc encerra a marcação de pontos; sem marcação, volta para o rosto inteiro. Modal aberto ou campo em edição ficam com a tecla.
   useEffect(() => {
-    if (zone && window.matchMedia('(max-width: 1100px)').matches) toolbarRef.current?.scrollIntoView({ block: 'start' })
-  }, [zone?.region])
+    if (!zone) return
+    const onKey = (e) => {
+      if (e.key !== 'Escape' || document.querySelector('.overlay') || e.target.closest?.('input, select, textarea')) return
+      if (adding) setAdding(false)
+      else {
+        setZone(null)
+        setSelected(null)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [zone, adding])
+
+  // Ao abrir uma região, ou ao escolher a imagem, o rosto inteiro vem para a tela, com os controles que ficam embaixo dele.
+  const stageWrap = useRef(null)
+  const reveal = () =>
+    requestAnimationFrame(() =>
+      stageWrap.current?.scrollIntoView({
+        block: 'nearest',
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      }),
+    )
+  useEffect(() => {
+    if (zone) reveal()
+  }, [zone?.region, zone?.side])
 
   // ---- simulação ----
   useEffect(() => {
@@ -335,7 +376,14 @@ export default function PlanningStep() {
     const point = withUid({ region: zone.region, side: zone.side, point_key: '', x, y, treatment: t.key, amount: t.initial })
     edit((ps) => [...ps, point])
     setSelected(point.uid)
-    setAdding(false)
+  }
+
+  // O tratamento escolhido sobre a imagem arma a marcação: cada toque coloca um ponto dele. Tocar de novo desarma.
+  function pickTreatment(key) {
+    const again = adding && treatment === key
+    setTreatment(key)
+    setAdding(!again)
+    if (!again) setShowMarks(true) // o ponto novo precisa aparecer
   }
 
   function openRegion(region, side) {
@@ -388,6 +436,7 @@ export default function PlanningStep() {
       setShowMarks(true) // foto nova: pontos recriados ficam visíveis para ajuste
       setCamera(false)
       setDirty(true)
+      reveal()
     } catch (err) {
       setError(err)
     } finally {
@@ -415,6 +464,7 @@ export default function PlanningStep() {
     setShowMarks(true)
     setCamera(false)
     setDirty(true)
+    reveal()
   }
 
   // Opcional: o profissional pode pedir os pontos sugeridos (posicionados pelo rosto da foto, ou na posição padrão do
@@ -528,35 +578,58 @@ export default function PlanningStep() {
     />
   )
 
+  const selectedIndex = zonePoints.findIndex((p) => p.uid === selected)
+  const selectedPoint = selectedIndex >= 0 ? zonePoints[selectedIndex] : null
+  const savedText = dirty ? 'Alterações não salvas' : plan ? `Salvo em ${new Date(plan.updated_at).toLocaleString('pt-BR')}` : ''
+
   return (
     <div className={`planning ${zone ? 'zoomed' : ''}`}>
-      <section className="card stage-card">
-        <div className="card-title">
-          <ScanFace size={18} /> Planejamento facial
-          <span className="sub">Escolha uma região, marque os pontos na imagem e defina a quantidade em cada um.</span>
-        </div>
-
-        {!anamnesisDone && (
-          <div className="alert warn">
-            Anamnese ainda não preenchida. <Link to="../anamnese">Preencher agora</Link>
+      <section className="card planner-card">
+        <header className="planner-head">
+          <div className="planner-title">
+            <ScanFace size={18} />
+            <div>
+              <strong>Planejamento facial</strong>
+              <span className="planner-status">{savedText}</span>
+            </div>
           </div>
+          {/* Totais em uma linha, sem painel: a tela é do rosto. */}
+          {!anamnesisDone && (
+            <Link to="../anamnese" className="chip warn" title="Anamnese ainda não preenchida">
+              Anamnese pendente
+            </Link>
+          )}
+          <div className="totals">
+            <span title="Total de unidades (toxina)">{formatAmount(totals.units)} U</span>
+            <span title="Total de ml (preenchimento e demais)">{formatAmount(totals.ml)} ml</span>
+            <span title="Número de áreas">
+              {totals.areas} {totals.areas === 1 ? 'área' : 'áreas'}
+            </span>
+          </div>
+          <div className="planner-actions">
+            {applied ? (
+              <button className="btn" onClick={startNewPlan}>
+                Novo plano a partir deste
+              </button>
+            ) : (
+              <>
+                {plan && (
+                  <button className="btn" onClick={askMarkApplied} disabled={busy || dirty} title={dirty ? 'Salve o plano antes' : undefined}>
+                    <CheckCheck size={16} /> Marcar como aplicado
+                  </button>
+                )}
+                <button className="btn primary" onClick={save} disabled={busy || (!photo && !modelMode)}>
+                  <Save size={16} /> {busy ? 'Salvando…' : 'Salvar plano'}
+                </button>
+              </>
+            )}
+          </div>
+        </header>
+
+        {applied && (
+          <div className="alert ok">Aplicado em {new Date(plan.applied_at).toLocaleString('pt-BR')}. Plano travado; estoque baixado.</div>
         )}
         <ErrorList error={error} />
-
-        <div className="treatments" role="group" aria-label="Tratamento a aplicar">
-          {TREATMENTS.map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              className={`treatment ${treatment === t.key ? 'active' : ''}`}
-              style={{ '--c': t.color }}
-              aria-pressed={treatment === t.key}
-              onClick={() => setTreatment(t.key)}
-            >
-              <i /> {t.label} <small>{t.unit}</small>
-            </button>
-          ))}
-        </div>
 
         {!image ? (
           <div className="photo-empty">
@@ -580,54 +653,292 @@ export default function PlanningStep() {
           </div>
         ) : (
           <>
-            {zone && (
-              <div ref={toolbarRef} className="stage-toolbar">
-                <button className="btn small" onClick={closeRegion}>
-                  <ChevronLeft size={15} /> Todas as regiões
-                </button>
-                <strong>{regionLabel(zone.region)}</strong>
-                {BILATERAL.has(zone.region) && (
-                  <div className="yesno" role="group" aria-label="Lado do rosto">
-                    {['D', 'E'].map((side) => (
-                      <button key={side} type="button" aria-pressed={zone.side === side} onClick={() => openRegion(zone.region, side)}>
-                        {SIDE_LABEL[side]}
-                      </button>
-                    ))}
+            <div className={`planner ${zone ? 'zoomed' : ''}`}>
+              <div ref={stageWrap} className="planner-stage" style={{ '--aspect': image.naturalWidth / image.naturalHeight }}>
+                {zone && (
+                  <div className="stage-toolbar">
+                    <button className="btn small" onClick={closeRegion}>
+                      <ChevronLeft size={15} /> Todas as regiões
+                    </button>
+                    <strong>{regionLabel(zone.region)}</strong>
+                    {BILATERAL.has(zone.region) && (
+                      <div className="yesno" role="group" aria-label="Lado do rosto">
+                        {['D', 'E'].map((side) => (
+                          <button key={side} type="button" aria-pressed={zone.side === side} onClick={() => openRegion(zone.region, side)}>
+                            {SIDE_LABEL[side]}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
-                <button
-                  className={`btn small ${adding ? 'primary' : ''}`}
-                  disabled={applied}
-                  onClick={() => {
-                    setShowMarks(true) // o ponto novo precisa aparecer
-                    setAdding(!adding)
-                  }}
-                >
-                  <Crosshair size={15} /> {adding ? 'Toque na foto…' : 'Adicionar ponto'}
-                </button>
-              </div>
-            )}
 
-            <FaceStage
-              imageUrl={image.src}
-              alt={modelMode ? 'Rosto simétrico de referência' : 'Foto frontal do paciente'}
-              aspect={image.naturalWidth / image.naturalHeight}
-              points={points}
-              zone={zone}
-              selectedId={selected}
-              hoverRegion={hoverRegion}
-              suggested={suggested}
-              adding={adding && !applied}
-              readOnly={applied}
-              simUrl={compare ? simUrl : null}
-              split={split}
-              showMarks={showMarks}
-              onPickRegion={openRegion}
-              onHoverRegion={setHoverRegion}
-              onSelectPoint={setSelected}
-              onMovePoint={movePoint}
-              onAddPoint={addPoint}
-            />
+                <FaceStage
+                  imageUrl={image.src}
+                  alt={modelMode ? 'Rosto simétrico de referência' : 'Foto frontal do paciente'}
+                  aspect={image.naturalWidth / image.naturalHeight}
+                  points={points}
+                  zone={zone}
+                  selectedId={selected}
+                  hoverRegion={hoverRegion}
+                  suggested={suggested}
+                  adding={adding && !applied}
+                  readOnly={applied}
+                  simUrl={compare ? simUrl : null}
+                  split={split}
+                  showMarks={showMarks}
+                  template={template}
+                  onPickRegion={openRegion}
+                  onHoverRegion={setHoverRegion}
+                  onSelectPoint={setSelected}
+                  onMovePoint={movePoint}
+                  onAddPoint={addPoint}
+                />
+
+                {!zone && showMarks && (
+                  <p className="hud-hint hud-top" key="overview">
+                    <MousePointerClick size={14} />
+                    {points.length ? 'Toque numa região para ampliar e editar os pontos.' : 'Toque numa região do rosto (por exemplo, o nariz) para começar.'}
+                  </p>
+                )}
+
+                {zone && !applied && (
+                  <div className="hud-bottom" key={`${zone.region}-${zone.side}`}>
+                    {selectedPoint && (
+                      <div className="hud-point" key={selectedPoint.uid}>
+                        <span className="badge" style={{ '--c': treatmentOf(selectedPoint.treatment).color }}>
+                          {selectedIndex + 1}
+                        </span>
+                        <span className="hud-point-name">
+                          {pointLabel(selectedPoint.region, selectedPoint.point_key) || `Ponto ${selectedIndex + 1}`}
+                          <small>{treatmentOf(selectedPoint.treatment).label}</small>
+                        </span>
+                        <button className="icon-btn" onClick={() => stepAmount(selectedPoint.uid, -1)} disabled={selectedPoint.amount <= 0} aria-label="Diminuir o ponto selecionado">
+                          <Minus size={14} />
+                        </button>
+                        <b className="hud-point-amount" aria-live="polite">
+                          {formatAmount(selectedPoint.amount)} {treatmentOf(selectedPoint.treatment).unit}
+                        </b>
+                        <button className="icon-btn" onClick={() => stepAmount(selectedPoint.uid, 1)} aria-label="Aumentar o ponto selecionado">
+                          <Plus size={14} />
+                        </button>
+                        <button className="icon-btn" onClick={() => removePoint(selectedPoint.uid)} aria-label="Remover o ponto selecionado">
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    )}
+                    <div className="treatments" role="group" aria-label="Tratamento a aplicar">
+                      {TREATMENTS.map((t, i) => (
+                        <button
+                          key={t.key}
+                          type="button"
+                          className={`treatment ${adding && treatment === t.key ? 'active' : ''}`}
+                          style={{ '--c': t.color, '--i': i }}
+                          aria-pressed={adding && treatment === t.key}
+                          onClick={() => pickTreatment(t.key)}
+                        >
+                          <i /> {t.label} <small>{t.unit}</small>
+                        </button>
+                      ))}
+                    </div>
+                    <p className="hud-hint">
+                      {adding ? (
+                        <>
+                          Toque na imagem para marcar cada ponto de {treatmentOf(treatment).label}.
+                          <button type="button" className="btn small" onClick={() => setAdding(false)}>
+                            <Check size={14} /> Concluir
+                          </button>
+                        </>
+                      ) : (
+                        'Escolha o tratamento e toque na imagem para marcar os pontos.'
+                      )}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {zone && (
+                <aside className="zone-panel" key={`${zone.region}-${zone.side}`}>
+                  <div className="card-title">
+                    {regionLabel(zone.region)}
+                    {SIDE_LABEL[zone.side] && ` · ${SIDE_LABEL[zone.side]}`}
+                    <span className="sub">{describeTotals(totalsOf(zonePoints))}</span>
+                  </div>
+                  {regionOf(zone.region)?.risk && (
+                    <p className="risk-note">
+                      <AlertTriangle size={14} /> {regionOf(zone.region).risk}
+                    </p>
+                  )}
+                  <fieldset className="point-list" disabled={applied}>
+                    {zonePoints.map((p, index) => {
+                      const t = treatmentOf(p.treatment)
+                      const name = pointLabel(p.region, p.point_key)
+                      return (
+                        <Fragment key={p.uid}>
+                          <div className={`prow ${selected === p.uid ? 'selected' : ''}`} onClick={() => setSelected(p.uid)}>
+                            {name && <span className="pname">{name}</span>}
+                            <span className="badge" style={{ '--c': t.color }}>
+                              {index + 1}
+                            </span>
+                            <select
+                              className="input mini"
+                              value={p.treatment}
+                              onChange={(e) => {
+                                // Ponto zerado recebe o tratamento ativo ao ganhar quantidade: o ativo acompanha a escolha feita aqui.
+                                if (p.amount === 0) setTreatment(e.target.value)
+                                patchPoint(
+                                  p.uid,
+                                  UNIT_BY_TREATMENT[e.target.value] === UNIT_BY_TREATMENT[p.treatment]
+                                    ? { treatment: e.target.value }
+                                    : { treatment: e.target.value, lot_id: null },
+                                )
+                              }}
+                              aria-label={`Tratamento do ponto ${index + 1}`}
+                            >
+                              {TREATMENTS.map((opt) => (
+                                <option key={opt.key} value={opt.key}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </select>
+                            <div className="amount">
+                              <span className="amount-name">Quantidade</span>
+                              <button className="icon-btn" onClick={() => stepAmount(p.uid, -1)} disabled={p.amount <= 0} aria-label="Diminuir">
+                                <Minus size={14} />
+                              </button>
+                              <AmountField
+                                value={p.amount}
+                                onChange={(amount) => typeAmount(p.uid, amount)}
+                                onStep={(direction) => stepAmount(p.uid, direction)}
+                                aria-label={`Quantidade do ponto ${index + 1} em ${t.unit}`}
+                              />
+                              <span className="unit">{t.unit}</span>
+                              <button className="icon-btn" onClick={() => stepAmount(p.uid, 1)} aria-label="Aumentar">
+                                <Plus size={14} />
+                              </button>
+                            </div>
+                            <button className="icon-btn" onClick={() => removePoint(p.uid)} aria-label={`Remover ponto ${index + 1}`}>
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                          {selected === p.uid && (
+                            <div className="pdetail">
+                              <label>
+                                <span>Técnica</span>
+                                <select className="input mini" value={p.technique ?? ''} onChange={(e) => patchPoint(p.uid, { technique: e.target.value })}>
+                                  <option value="">—</option>
+                                  {TECHNIQUES.map((o) => (
+                                    <option key={o.key} value={o.key}>
+                                      {o.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label>
+                                <span>Profundidade / plano</span>
+                                <select className="input mini" value={p.depth ?? ''} onChange={(e) => patchPoint(p.uid, { depth: e.target.value })}>
+                                  <option value="">—</option>
+                                  {DEPTHS.map((o) => (
+                                    <option key={o.key} value={o.key}>
+                                      {o.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              <div className="lot">
+                                <label>
+                                  <span>Lote (opcional)</span>
+                                  <select
+                                    className="input mini"
+                                    value={p.lot_id ?? ''}
+                                    onChange={(e) => patchPoint(p.uid, { lot_id: e.target.value ? Number(e.target.value) : null })}
+                                  >
+                                    <option value="">Sem lote</option>
+                                    {lotOptions(p).map((l) => (
+                                      <option key={l.id} value={l.id}>
+                                        {l.stale ? `Lote #${l.id} (indisponível)` : lotLabel(l)}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                                {!applied && (
+                                  <button type="button" className="btn small" onClick={() => setLotFor({ uid: p.uid, treatment: p.treatment })}>
+                                    <PackagePlus size={15} /> Novo lote
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </Fragment>
+                      )
+                    })}
+                    {!zonePoints.length && (
+                      <p className="note">Nenhum ponto nesta região. Escolha o tratamento sobre a imagem e toque nela para marcar.</p>
+                    )}
+                  </fieldset>
+                </aside>
+              )}
+            </div>
+
+            <div className="planner-regions">
+              <div className="planner-regions-head">
+                <strong>Regiões do plano</strong>
+                <span className="spacer" />
+                {!applied && !points.length && (
+                  <button type="button" className="btn small" onClick={suggestPoints} disabled={busy}>
+                    <Wand2 size={15} /> Sugerir pontos
+                  </button>
+                )}
+                <select
+                  className="input mini"
+                  value=""
+                  onChange={(e) => e.target.value && openRegion(e.target.value)}
+                  aria-label="Ir para região"
+                >
+                  <option value="">Ir para região…</option>
+                  {GROUPS.map((group) => (
+                    <optgroup key={group.key} label={group.label}>
+                      {REGIONS.filter((r) => r.group === group.key).map((r) => (
+                        <option key={r.key} value={r.key}>
+                          {r.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </div>
+              {regionsWithPoints.length ? (
+                <div className="region-list">
+                  {GROUPS.map((group) => {
+                    const inGroup = REGIONS.filter((r) => r.group === group.key && regionsWithPoints.includes(r.key))
+                    if (!inGroup.length) return null
+                    return (
+                      <Fragment key={group.key}>
+                        <span className="region-group">{group.label}</span>
+                        {inGroup.map(({ key, label }) => {
+                          const total = totalsOf(points.filter((p) => p.region === key))
+                          return (
+                            <button
+                              key={key}
+                              type="button"
+                              className={`region-row ${hoverRegion === key ? 'hover' : ''} ${suggested.includes(key) ? 'suggest' : ''} ${zone?.region === key ? 'current' : ''}`}
+                              onClick={() => openRegion(key)}
+                              onMouseEnter={() => setHoverRegion(key)}
+                              onMouseLeave={() => setHoverRegion(null)}
+                            >
+                              <span>{label}</span>
+                              <b className={total.areas ? '' : 'muted'}>{describeTotals(total)}</b>
+                            </button>
+                          )
+                        })}
+                      </Fragment>
+                    )
+                  })}
+                </div>
+              ) : (
+                <p className="note">As regiões entram aqui conforme você marca os pontos.</p>
+              )}
+            </div>
 
             <div className="stage-foot">
               {!modelMode && (
@@ -666,7 +977,7 @@ export default function PlanningStep() {
               </button>
             </div>
             {modelMode && <p className="note">Rosto simétrico de referência: o plano não usa foto. Os pontos valem para este desenho.</p>}
-            <p className="note">{DETECT_NOTE[detect]}</p>
+            {DETECT_NOTE[detect] && <p className="note">{DETECT_NOTE[detect]}</p>}
             {compare && (
               <p className="note">
                 Simulação ilustrativa (atualiza a cada alteração de quantidade) feita a partir das quantidades planejadas. Não representa garantia de resultado clínico.
@@ -677,249 +988,21 @@ export default function PlanningStep() {
         {filePicker}
       </section>
 
-      <aside className="side">
-        <section className="card">
-          <div className="card-title">Resumo do plano</div>
-          <dl className="summary">
-            <div>
-              <dt>Total de ml (preenchimento)</dt>
-              <dd>{formatAmount(totals.ml)} ml</dd>
-            </div>
-            <div>
-              <dt>Total de unidades (toxina)</dt>
-              <dd>{formatAmount(totals.units)} un</dd>
-            </div>
-            <div>
-              <dt>Número de áreas</dt>
-              <dd>{totals.areas}</dd>
-            </div>
-          </dl>
-          <button className="btn primary wide" onClick={save} disabled={busy || (!photo && !modelMode) || applied}>
-            <Save size={16} /> {busy ? 'Salvando…' : 'Salvar plano'}
-          </button>
-          {plan && !applied && (
-            <div className="applied-bar">
-              <button className="btn wide" onClick={askMarkApplied} disabled={busy || dirty} title={dirty ? 'Salve o plano antes' : undefined}>
-                <CheckCheck size={16} /> Marcar como aplicado
-              </button>
-            </div>
-          )}
-          {applied && (
-            <div className="applied-bar">
-              <div className="alert ok">Aplicado em {new Date(plan.applied_at).toLocaleString('pt-BR')}. Plano travado; estoque baixado.</div>
-              <button className="btn wide" onClick={startNewPlan}>
-                Novo plano a partir deste
-              </button>
-            </div>
-          )}
-          <p className="note center">
-            {dirty ? 'Alterações não salvas' : plan ? `Salvo em ${new Date(plan.updated_at).toLocaleString('pt-BR')}` : ''}
-          </p>
-        </section>
+      {image && !modelMode && <SymmetryPanel image={image} getLandmarks={getLandmarks} suggested={suggested} onSuggest={setSuggested} />}
 
-        {image && (
-          <section className="card regions-card">
-            {!zone ? (
-              <>
-                <div className="card-title">Regiões</div>
-                {!regionsWithPoints.length && (
-                  <p className="note">Nenhuma região ainda. Escolha uma região abaixo para começar a colocar os pontos.</p>
-                )}
-                <div className="region-list">
-                  {GROUPS.map((group) => {
-                    const inGroup = REGIONS.filter((r) => r.group === group.key && regionsWithPoints.includes(r.key))
-                    if (!inGroup.length) return null
-                    return (
-                      <Fragment key={group.key}>
-                        <span className="region-group">{group.label}</span>
-                        {inGroup.map(({ key, label }) => {
-                          const total = totalsOf(points.filter((p) => p.region === key))
-                          return (
-                            <button
-                              key={key}
-                              type="button"
-                              className={`region-row ${hoverRegion === key ? 'hover' : ''} ${suggested.includes(key) ? 'suggest' : ''}`}
-                              onClick={() => openRegion(key)}
-                              onMouseEnter={() => setHoverRegion(key)}
-                              onMouseLeave={() => setHoverRegion(null)}
-                            >
-                              <span>{label}</span>
-                              <b className={total.areas ? '' : 'muted'}>{describeTotals(total)}</b>
-                            </button>
-                          )
-                        })}
-                      </Fragment>
-                    )
-                  })}
-                </div>
-                {!applied && (
-                  <div className="region-add">
-                    <label>
-                      <span>Adicionar região</span>
-                      <select
-                        className="input mini"
-                        value=""
-                        onChange={(e) => e.target.value && openRegion(e.target.value)}
-                        aria-label="Adicionar região"
-                      >
-                        <option value="">Escolher região…</option>
-                        {GROUPS.map((group) => (
-                          <optgroup key={group.key} label={group.label}>
-                            {REGIONS.filter((r) => r.group === group.key && !regionsWithPoints.includes(r.key)).map((r) => (
-                              <option key={r.key} value={r.key}>
-                                {r.label}
-                              </option>
-                            ))}
-                          </optgroup>
-                        ))}
-                      </select>
-                    </label>
-                    {!points.length && (
-                      <button type="button" className="btn small" onClick={suggestPoints} disabled={busy}>
-                        <Wand2 size={15} /> Sugerir pontos
-                      </button>
-                    )}
-                  </div>
-                )}
-              </>
-            ) : (
-              <>
-                <div className="card-title">
-                  {regionLabel(zone.region)}
-                  {SIDE_LABEL[zone.side] && ` · ${SIDE_LABEL[zone.side]}`}
-                  <span className="sub">{describeTotals(totalsOf(zonePoints))}</span>
-                </div>
-                {regionOf(zone.region)?.risk && (
-                  <p className="risk-note">
-                    <AlertTriangle size={14} /> {regionOf(zone.region).risk}
-                  </p>
-                )}
-                <fieldset className="point-list" disabled={applied}>
-                  {zonePoints.map((p, index) => {
-                    const t = treatmentOf(p.treatment)
-                    const name = pointLabel(p.region, p.point_key)
-                    return (
-                      <Fragment key={p.uid}>
-                      <div className={`prow ${selected === p.uid ? 'selected' : ''}`} onClick={() => setSelected(p.uid)}>
-                        {name && <span className="pname">{name}</span>}
-                        <span className="badge" style={{ '--c': t.color }}>
-                          {index + 1}
-                        </span>
-                        <select
-                          className="input mini"
-                          value={p.treatment}
-                          onChange={(e) => {
-                            // Ponto zerado recebe o tratamento ativo ao ganhar quantidade: o ativo acompanha a escolha feita aqui.
-                            if (p.amount === 0) setTreatment(e.target.value)
-                            patchPoint(
-                              p.uid,
-                              UNIT_BY_TREATMENT[e.target.value] === UNIT_BY_TREATMENT[p.treatment]
-                                ? { treatment: e.target.value }
-                                : { treatment: e.target.value, lot_id: null },
-                            )
-                          }}
-                          aria-label={`Tratamento do ponto ${index + 1}`}
-                        >
-                          {TREATMENTS.map((opt) => (
-                            <option key={opt.key} value={opt.key}>
-                              {opt.label}
-                            </option>
-                          ))}
-                        </select>
-                        <div className="amount">
-                          <span className="amount-name">Quantidade</span>
-                          <button className="icon-btn" onClick={() => stepAmount(p.uid, -1)} disabled={p.amount <= 0} aria-label="Diminuir">
-                            <Minus size={14} />
-                          </button>
-                          <AmountField
-                            value={p.amount}
-                            onChange={(amount) => typeAmount(p.uid, amount)}
-                            onStep={(direction) => stepAmount(p.uid, direction)}
-                            aria-label={`Quantidade do ponto ${index + 1} em ${t.unit}`}
-                          />
-                          <span className="unit">{t.unit}</span>
-                          <button className="icon-btn" onClick={() => stepAmount(p.uid, 1)} aria-label="Aumentar">
-                            <Plus size={14} />
-                          </button>
-                        </div>
-                        <button className="icon-btn" onClick={() => removePoint(p.uid)} aria-label={`Remover ponto ${index + 1}`}>
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                      {selected === p.uid && (
-                        <div className="pdetail">
-                          <label>
-                            <span>Técnica</span>
-                            <select className="input mini" value={p.technique ?? ''} onChange={(e) => patchPoint(p.uid, { technique: e.target.value })}>
-                              <option value="">—</option>
-                              {TECHNIQUES.map((o) => (
-                                <option key={o.key} value={o.key}>
-                                  {o.label}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <label>
-                            <span>Profundidade / plano</span>
-                            <select className="input mini" value={p.depth ?? ''} onChange={(e) => patchPoint(p.uid, { depth: e.target.value })}>
-                              <option value="">—</option>
-                              {DEPTHS.map((o) => (
-                                <option key={o.key} value={o.key}>
-                                  {o.label}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <div className="lot">
-                            <label>
-                              <span>Lote (opcional)</span>
-                              <select
-                                className="input mini"
-                                value={p.lot_id ?? ''}
-                                onChange={(e) => patchPoint(p.uid, { lot_id: e.target.value ? Number(e.target.value) : null })}
-                              >
-                                <option value="">Sem lote</option>
-                                {lotOptions(p).map((l) => (
-                                  <option key={l.id} value={l.id}>
-                                    {l.stale ? `Lote #${l.id} (indisponível)` : lotLabel(l)}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                            {!applied && (
-                              <button type="button" className="btn small" onClick={() => setLotFor({ uid: p.uid, treatment: p.treatment })}>
-                                <PackagePlus size={15} /> Novo lote
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                      </Fragment>
-                    )
-                  })}
-                  {!zonePoints.length && <p className="note">Nenhum ponto nesta região. Use “Adicionar ponto”.</p>}
-                </fieldset>
-              </>
-            )}
-          </section>
-        )}
-
-        {image && !modelMode && <SymmetryPanel image={image} getLandmarks={getLandmarks} suggested={suggested} onSuggest={setSuggested} />}
-
-        <section className="card">
-          <div className="card-title">Observações</div>
-          <textarea
-            className="input"
-            disabled={applied}
-            placeholder="Ex.: assimetria leve em malar direito. Paciente relata bruxismo."
-            value={notes}
-            onChange={(e) => {
-              setNotes(e.target.value)
-              setDirty(true)
-            }}
-          />
-        </section>
-      </aside>
+      <section className="card">
+        <div className="card-title">Observações</div>
+        <textarea
+          className="input"
+          disabled={applied}
+          placeholder="Ex.: assimetria leve em malar direito. Paciente relata bruxismo."
+          value={notes}
+          onChange={(e) => {
+            setNotes(e.target.value)
+            setDirty(true)
+          }}
+        />
+      </section>
 
       {camera && <CameraCapture onCapture={addPhoto} onClose={() => setCamera(false)} />}
       {confirm && <ConfirmModal {...confirm} onClose={() => setConfirm(null)} />}

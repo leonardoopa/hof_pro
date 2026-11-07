@@ -262,6 +262,7 @@ def test_terms_latest_active_version(client, auth, terms):
 
 def test_sign_stores_evidence_and_hash(client, auth, other_auth, patient, terms):
     pid = patient["id"]
+    plan_with(client, auth, patient, None, amount=4)
     r = client.post(
         f"/api/patients/{pid}/consents",
         json={"term_id": terms["botox"].id, "signer_name": "Maria Paciente", "signature": signature_data()},
@@ -296,6 +297,7 @@ def test_sign_stores_evidence_and_hash(client, auth, other_auth, patient, terms)
 
 
 def test_sign_validation(client, auth, patient, terms):
+    plan_with(client, auth, patient, None, amount=4)
     url = f"/api/patients/{patient['id']}/consents"
     base = {"term_id": terms["botox"].id, "signer_name": "Maria"}
     assert client.post(url, json=base | {"signature": "data:image/png;base64,naoebase64!!!!!!!!!"}, headers=auth).status_code == 422
@@ -306,8 +308,40 @@ def test_sign_validation(client, auth, patient, terms):
     assert client.post(url, json=base | {"signature": signature_data()}, headers=auth).status_code == 404
 
 
+def test_patient_terms_follow_the_latest_plan(client, auth, other_auth, patient, terms):
+    url = f"/api/patients/{patient['id']}/consents/terms"
+    kinds = lambda: [t["kind"] for t in client.get(url, headers=auth).json()]  # noqa: E731
+    assert kinds() == ["uso_imagem"]  # sem plano, só o termo de uso de imagem
+
+    body = {"points": [
+        {"region": "testa", "treatment": "botox", "x": 0.5, "y": 0.2, "amount": 4},
+        {"region": "malar", "treatment": "preenchimento", "x": 0.3, "y": 0.5, "amount": 0},  # sem quantidade não conta
+    ]}
+    assert client.post(f"/api/patients/{patient['id']}/plans", json=body, headers=auth).status_code == 201
+    Term.objects.create(kind="preenchimento", version=1, title="Termo preenchimento", content="Texto.")
+    assert kinds() == ["botox", "uso_imagem"]
+
+    plan_with(client, auth, patient, None, amount=0.5, treatment="preenchimento")  # o plano mais recente manda
+    assert kinds() == ["preenchimento", "uso_imagem"]
+    assert client.get(url, headers=other_auth).status_code == 404
+
+
+def test_sign_refuses_a_procedure_that_is_not_planned(client, auth, patient, terms):
+    url = f"/api/patients/{patient['id']}/consents"
+    botox = {"term_id": terms["botox"].id, "signer_name": "Maria", "signature": signature_data()}
+    r = client.post(url, json=botox, headers=auth)
+    assert r.status_code == 409 and "não está no plano" in r.json()["detail"]
+    image = {"term_id": terms["img"].id, "signer_name": "Maria", "signature": signature_data()}
+    assert client.post(url, json=image, headers=auth).status_code == 201  # uso de imagem não depende do plano
+
+    plan_with(client, auth, patient, None, amount=4)
+    assert client.post(url, json=botox, headers=auth).status_code == 201
+    assert [s["kind"] for s in client.get(url, headers=auth).json()] == ["botox", "uso_imagem"]
+
+
 def test_image_use_consent_is_separate_and_revocable(client, auth, patient, terms):
     pid = patient["id"]
+    plan_with(client, auth, patient, None, amount=4)
     proc = client.post(
         f"/api/patients/{pid}/consents",
         json={"term_id": terms["botox"].id, "signer_name": "Maria", "signature": signature_data()},
@@ -400,11 +434,11 @@ def test_hide_masks_personal_data_deletes_nothing_and_reveal_restores(client, au
         json={"notes": "texto livre sensivel", "answers": [{"question_id": questions[0].id, "answer": True, "detail": "penicilina"}]},
         headers=auth,
     )
+    l, plan = applied_patient(client, auth, p, number="ANON")
     term = Term.objects.create(kind="botox", version=1, title="T", content="c")
     sig = client.post(
         f"/api/patients/{pid}/consents", json={"term_id": term.id, "signer_name": "Joana Real", "signature": signature_data()}, headers=auth
     ).json()
-    l, plan = applied_patient(client, auth, p, number="ANON")
     draft = plan_with(client, auth, p, None, amount=3, point_key="procero").json()
 
     assert client.post(f"/api/patients/{pid}/anonymize", headers=other_auth).status_code == 404

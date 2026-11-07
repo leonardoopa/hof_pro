@@ -153,6 +153,7 @@ export const api = {
 
   consent: {
     terms: () => data('/consent/terms'),
+    patientTerms: (patientId) => data(`/patients/${patientId}/consents/terms`),
     list: (patientId) => data(`/patients/${patientId}/consents`),
     sign: (patientId, body) => data(`/patients/${patientId}/consents`, { method: 'POST', json: body }),
     revoke: (id) => data(`/consents/${id}/revoke`, { method: 'POST' }),

@@ -1,21 +1,79 @@
+/* ---------- planejamento: o rosto é a tela; os controles ficam sobre a imagem ---------- */
 .planning {
+  --glass: color-mix(in srgb, var(--surface) 84%, transparent);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
   gap: var(--space-5);
+}
+.planner-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.planner-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-right: auto;
+}
+.planner-title strong {
+  display: block;
+  font-size: var(--text-lg);
+}
+.planner-status {
+  display: block;
+  min-height: 16px;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.totals span {
+  padding: 4px 11px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-soft);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.planner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* rosto e, com uma região aberta, os pontos dela ao lado (em tela larga) ou abaixo */
+.planner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
   align-items: start;
 }
-.side {
-  display: grid;
-  gap: var(--space-4);
+@media (min-width: 1101px) {
+  .planner {
+    grid-template-columns: minmax(0, 1fr) 0px;
+    column-gap: 0;
+    transition: grid-template-columns 0.45s var(--ease), column-gap 0.45s var(--ease);
+  }
+  .planner.zoomed {
+    grid-template-columns: minmax(0, 1fr) 340px;
+    column-gap: var(--space-5);
+  }
 }
-@media (max-width: 1100px) {
-  .planning {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  /* região aberta: os pontos logo abaixo da foto, antes do resumo */
-  .planning.zoomed .regions-card {
-    order: -1;
-  }
+.planner-stage {
+  --stage-h: clamp(440px, calc(100vh - 96px), 980px);
+  position: relative;
+  scroll-margin: var(--space-4);
+  width: min(100%, calc(var(--stage-h) * var(--aspect)));
+  margin: 0 auto;
+}
+.planner-stage .stage {
+  width: 100%;
 }
 
 /* ---------- tratamentos ---------- */
@@ -91,15 +149,34 @@
   font-size: var(--text-sm);
 }
 
+/* barra da região aberta, sobre a imagem: voltar, nome e lado */
 .stage-toolbar {
+  position: absolute;
+  top: var(--space-3);
+  left: var(--space-3);
+  right: var(--space-3);
+  z-index: 6;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-3);
-  margin-bottom: 10px;
+  gap: var(--space-2);
+  pointer-events: none;
+  animation: hud-down 0.35s var(--ease) both;
+}
+.stage-toolbar > * {
+  pointer-events: auto;
+  box-shadow: var(--shadow-sm);
 }
 .stage-toolbar strong {
-  flex: 1;
-  font-size: var(--text-lg);
+  padding: 6px 13px;
+  border-radius: var(--radius-pill);
+  background: var(--glass);
+  backdrop-filter: blur(10px);
+  font-size: var(--text-md);
+}
+.stage-toolbar .yesno {
+  background: var(--glass);
+  backdrop-filter: blur(10px);
 }
 
 .stage {
@@ -549,8 +626,24 @@
 
 /* ---------- mobile ---------- */
 @media (max-width: 560px) {
+  .planner-card {
+    padding: var(--space-3);
+  }
+  /* no celular a barra da região fica acima da imagem, para sobrar rosto */
   .stage-toolbar {
-    flex-wrap: wrap;
+    position: static;
+    margin-bottom: var(--space-2);
+  }
+  .stage-toolbar > * {
+    box-shadow: none;
+  }
+  .stage-toolbar strong {
+    padding-inline: 4px;
+    background: none;
+    backdrop-filter: none;
+  }
+  .stage-toolbar .yesno {
+    background: var(--bg);
   }
   .split input {
     width: 100px;
@@ -642,4 +735,299 @@
 }
 .region-row.suggest {
   background: var(--warn-soft);
+}
+
+/* ---------- controles sobre a imagem ---------- */
+.hud-bottom,
+.hud-hint.hud-top {
+  position: absolute;
+  z-index: 6;
+}
+.hud-bottom {
+  left: var(--space-3);
+  right: var(--space-3);
+  bottom: var(--space-3);
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  pointer-events: none;
+}
+.hud-bottom > * {
+  pointer-events: auto;
+}
+.hud-bottom .treatments {
+  justify-content: center;
+  margin: 0;
+  padding: 6px;
+  border-radius: 22px;
+  background: var(--glass);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow);
+}
+.hud-bottom .treatment {
+  animation: chip-in 0.4s var(--ease) both;
+  animation-delay: calc(var(--i) * 45ms);
+}
+.hud-bottom .treatment.active i {
+  animation: armed 1.3s ease-in-out infinite;
+}
+.hud-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 6px 13px;
+  border-radius: var(--radius-pill);
+  background: var(--glass);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-sm);
+  color: var(--text);
+  font-size: var(--text-sm);
+  animation: hud-fade 0.4s var(--ease) both;
+}
+.hud-hint .btn {
+  margin: -3px -7px -3px 2px;
+}
+.hud-hint.hud-top {
+  top: var(--space-3);
+  left: var(--space-3);
+  right: var(--space-3);
+  width: fit-content;
+  max-width: calc(100% - 2 * var(--space-3));
+  margin-inline: auto;
+  white-space: nowrap;
+  pointer-events: none;
+}
+/* ponto escolhido: quantidade à mão, sem sair da imagem */
+.hud-point {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 100%;
+  padding: 5px 6px 5px 5px;
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  animation: pop-in 0.3s var(--ease) both;
+}
+.hud-point-name {
+  display: grid;
+  min-width: 0;
+  max-width: 170px;
+  overflow: hidden;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  line-height: 1.2;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.hud-point-name small {
+  color: var(--muted);
+  font-weight: var(--weight-regular);
+}
+.hud-point-amount {
+  min-width: 58px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* visão geral: o rosto inteiro é alvo; o anel segue o cursor até a região mais próxima */
+.stage.aiming {
+  cursor: pointer;
+}
+.region-aim {
+  position: absolute;
+  z-index: 4;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  transition: left 0.22s var(--ease), top 0.22s var(--ease);
+}
+.region-aim i {
+  position: absolute;
+  left: -27px;
+  top: -27px;
+  width: 54px;
+  height: 54px;
+  border: 2px solid var(--primary);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  animation: aim-pulse 1.6s ease-in-out infinite;
+}
+.region-aim b {
+  position: absolute;
+  top: 34px;
+  left: 0;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  color: var(--text);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+/* pontos aparecem com um salto curto; hotspots entram suaves */
+.pt {
+  animation: pt-pop 0.38s var(--ease) both;
+}
+.hotspot {
+  animation: hud-fade 0.35s var(--ease) both;
+}
+
+/* painel da região aberta */
+.zone-panel {
+  min-width: 0;
+  animation: panel-in 0.4s var(--ease) both;
+}
+@media (min-width: 1101px) {
+  .zone-panel {
+    max-height: clamp(440px, calc(100vh - 96px), 980px);
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+}
+@media (max-width: 1100px) {
+  .zone-panel {
+    animation-name: panel-up;
+  }
+}
+
+/* regiões do plano, em fichas abaixo do rosto */
+.planner-regions {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line);
+}
+.planner-regions-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+.planner-regions-head .spacer {
+  flex: 1;
+}
+.planner-regions-head select {
+  width: auto;
+  min-width: 170px;
+}
+.planner-regions .region-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.planner-regions .region-group {
+  flex-basis: 100%;
+  padding: var(--space-2) 2px 0;
+}
+.planner-regions .region-group:first-child {
+  padding-top: 0;
+}
+.planner-regions .region-row {
+  display: inline-flex;
+  gap: var(--space-2);
+  padding: 6px 13px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  animation: pop-in 0.3s var(--ease) both;
+}
+.planner-regions .region-row.current {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+@keyframes hud-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes hud-down {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+@keyframes chip-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.92);
+  }
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+}
+@keyframes panel-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+@keyframes pt-pop {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(calc(0.3 / var(--s)));
+  }
+}
+@keyframes armed {
+  50% {
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--c) 35%, transparent);
+  }
+}
+@keyframes aim-pulse {
+  50% {
+    transform: scale(1.12);
+    background: color-mix(in srgb, var(--primary) 22%, transparent);
+  }
+}
+
+/* celular: a faixa de tratamentos rola de lado e a dica quebra linha, sem sair da imagem */
+@media (max-width: 560px) {
+  .planner-head {
+    gap: var(--space-2);
+  }
+  .totals span {
+    padding: 4px 9px;
+  }
+  .hud-bottom {
+    left: var(--space-2);
+    right: var(--space-2);
+    bottom: var(--space-2);
+    justify-items: stretch;
+  }
+  .hud-bottom .treatments {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .hud-bottom .treatment {
+    flex: none;
+    padding: 6px 11px;
+  }
+  .hud-bottom .hud-hint,
+  .hud-point {
+    justify-self: center;
+  }
+  /* com um ponto escolhido, o editor dele toma o lugar da dica */
+  .hud-point ~ .hud-hint {
+    display: none;
+  }
+  .hud-hint.hud-top {
+    white-space: normal;
+    text-align: center;
+  }
 }

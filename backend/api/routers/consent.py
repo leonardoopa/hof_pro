@@ -57,13 +57,34 @@ def _own_signature(user: User, signature_id: int) -> Signature:
     return sig
 
 
+def _latest_terms() -> list[Term]:
+    latest = Term.objects.filter(active=True).values("kind").annotate(v=Max("version"))
+    terms = [Term.objects.get(kind=row["kind"], version=row["v"]) for row in latest]
+    return sorted(terms, key=lambda t: (t.kind == Term.Kind.IMAGE_USE, t.kind))
+
+
+def planned_kinds(patient: Patient) -> set[str]:
+    """Tratamentos com quantidade no plano mais recente. O paciente só assina o termo do que foi planejado:
+    assinar por um procedimento que não vai fazer não faz sentido."""
+    plan = patient.plans.order_by("-created_at", "-id").first()
+    if plan is None:
+        return set()
+    return set(plan.points.filter(amount__gt=0).values_list("treatment", flat=True))
+
+
 @router.get("/consent/terms", response_model=list[TermOut])
 @orm
 def list_terms(user: User = Depends(current_user)):
     """Versão ativa mais recente de cada termo."""
-    latest = Term.objects.filter(active=True).values("kind").annotate(v=Max("version"))
-    terms = [Term.objects.get(kind=row["kind"], version=row["v"]) for row in latest]
-    return sorted(terms, key=lambda t: (t.kind == Term.Kind.IMAGE_USE, t.kind))
+    return _latest_terms()
+
+
+@router.get("/patients/{patient_id}/consents/terms", response_model=list[TermOut])
+@orm
+def patient_terms(patient_id: int, user: User = Depends(current_user)):
+    """Termos que este paciente pode assinar: os dos tratamentos do plano mais recente e o de uso de imagem."""
+    kinds = planned_kinds(get_patient_or_404(user, patient_id)) | {Term.Kind.IMAGE_USE}
+    return [t for t in _latest_terms() if t.kind in kinds]
 
 
 @router.get("/patients/{patient_id}/consents", response_model=list[SignatureOut])
@@ -80,6 +101,11 @@ def sign(patient_id: int, data: SignIn, request: Request, user: User = Depends(c
     term = Term.objects.filter(pk=data.term_id, active=True).first()
     if term is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Termo não encontrado ou desativado.")
+    if term.kind != Term.Kind.IMAGE_USE and term.kind not in planned_kinds(patient):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Este procedimento não está no plano do paciente: inclua-o no planejamento antes de colher a assinatura.",
+        )
     image = _decode_signature(data.signature)
     signed_at = timezone.now().replace(microsecond=0)
     name = data.signer_name.strip()

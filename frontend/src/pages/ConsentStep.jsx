@@ -1,6 +1,6 @@
 import { FileSignature, Printer, ShieldCheck } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useOutletContext } from 'react-router-dom'
+import { Link, useOutletContext } from 'react-router-dom'
 import { api } from '../api/client'
 import ConfirmModal from '../components/ConfirmModal'
 import ErrorList from '../components/ErrorList'
@@ -111,7 +111,8 @@ export default function ConsentStep() {
 
   const load = useCallback(async () => {
     try {
-      const [t, s, tr] = await Promise.all([api.consent.terms(), api.consent.list(patient.id), api.inventory.traceability(patient.id)])
+      // Só os termos dos tratamentos do plano (mais o de uso de imagem): o paciente não assina pelo que não vai fazer.
+      const [t, s, tr] = await Promise.all([api.consent.patientTerms(patient.id), api.consent.list(patient.id), api.inventory.traceability(patient.id)])
       setTerms(t)
       setSignatures(s)
       setTrace(tr)
@@ -149,11 +150,17 @@ export default function ConsentStep() {
       <section className="card">
         <div className="card-title">
           <FileSignature size={18} /> Termos de consentimento do procedimento
+          <span className="sub">Só os tratamentos do plano mais recente.</span>
         </div>
         {procedureTerms.map((t) => (
           <TermRow key={t.id} term={t} {...rowProps} />
         ))}
-        {!procedureTerms.length && <p className="note">Nenhum termo ativo. Cadastre no admin.</p>}
+        {!procedureTerms.length && (
+          <p className="note">
+            Nenhum tratamento no plano ainda. O termo de cada tratamento aparece aqui quando ele entra no{' '}
+            <Link to="../planejamento">planejamento</Link> com quantidade.
+          </p>
+        )}
       </section>
 
       <section className="card">
