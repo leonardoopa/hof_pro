@@ -149,3 +149,24 @@ def test_convert_lead(client, auth):
     assert body["patient_id"] and body["patient_name"] == "Joana Lima" and body["lead_name"] == ""
     assert Patient.objects.get(pk=body["patient_id"]).phone == "11999"
     assert client.post(f"/api/appointments/{a['id']}/convert", headers=auth).status_code == 409
+
+
+def test_slot_check_runs_under_owner_lock(client, auth, monkeypatch):
+    """Criar, editar e mudar status travam o profissional dentro da transação, antes de checar o conflito."""
+    from django.db import connection
+
+    from api.routers import appointments
+
+    calls = []
+    real = appointments._lock_owner
+
+    def spy(user):
+        calls.append(connection.in_atomic_block)
+        real(user)
+
+    monkeypatch.setattr(appointments, "_lock_owner", spy)
+    a = book(client, auth, lead_name="A").json()
+    s, e = slot(11)
+    assert client.patch(f"/api/appointments/{a['id']}", json={"starts_at": s, "ends_at": e}, headers=auth).status_code == 200
+    assert client.post(f"/api/appointments/{a['id']}/status", json={"status": "confirmado"}, headers=auth).status_code == 200
+    assert calls == [True, True, True]

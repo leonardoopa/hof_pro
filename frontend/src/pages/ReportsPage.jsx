@@ -2,16 +2,16 @@ import { Download } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import ErrorList from '../components/ErrorList'
+import { csvCell } from './csv'
 
 // Dia local em AAAA-MM-DD; toISOString daria o dia seguinte depois das 21h no Brasil.
 const iso = (d) => d.toLocaleDateString('sv-SE')
 const fmtDay = (value) => new Date(value).toLocaleDateString('pt-BR')
 const fmtNum = (value) => Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 2 })
 
-// Exporta no cliente: BOM para o Excel reconhecer UTF-8; aspas escapadas.
+// Exporta no cliente: BOM para o Excel reconhecer UTF-8; aspas escapadas e fórmulas neutralizadas (csv.js).
 export function downloadCsv(filename, header, rows) {
-  const cell = (v) => `"${String(v ?? '').replaceAll('"', '""')}"`
-  const text = [header, ...rows].map((r) => r.map(cell).join(';')).join('\r\n')
+  const text = [header, ...rows].map((r) => r.map(csvCell).join(';')).join('\r\n')
   const url = URL.createObjectURL(new Blob(['﻿' + text], { type: 'text/csv;charset=utf-8' }))
   const a = document.createElement('a')
   a.href = url
@@ -49,12 +49,14 @@ function MonthlySection({ setError }) {
 
   useEffect(() => {
     if (!month) return
+    let stale = false // troca rápida de mês: ignora a resposta antiga
     setLoading(true)
     api.reports
       .monthly(month)
-      .then((r) => { setData(r); setError(null) })
-      .catch((e) => { setData(null); setError(e) })
-      .finally(() => setLoading(false))
+      .then((r) => { if (!stale) { setData(r); setError(null) } })
+      .catch((e) => { if (!stale) { setData(null); setError(e) } })
+      .finally(() => { if (!stale) setLoading(false) })
+    return () => { stale = true }
   }, [month, setError])
 
   const exportCsv = () => {
@@ -68,7 +70,7 @@ function MonthlySection({ setError }) {
   return (
     <Section
       title="Relatório mensal"
-      sub="Pacientes atendidos e produtos/lotes usados no mês. Pacientes com dados ocultos não aparecem."
+      sub="Pacientes atendidos e produtos/lotes usados no mês. Pacientes com dados ocultos não aparecem na lista, mas o consumo deles entra nos totais de produtos e lotes (é estoque)."
       disabled={!data || (!data.patients.length && !data.by_lot.length)}
       onExport={exportCsv}
     >

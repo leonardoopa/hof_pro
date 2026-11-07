@@ -34,6 +34,13 @@ def _aware(dt: datetime) -> datetime:
     return timezone.make_aware(dt) if timezone.is_naive(dt) else dt
 
 
+def _lock_owner(user: User) -> None:
+    """Serializa as gravações de agenda do profissional. Deve ser chamado dentro de `transaction.atomic()`,
+    antes de `_check_slot`: sem isso, dois pedidos simultâneos passam pela checagem e duplicam o horário
+    (SELECT + INSERT em READ COMMITTED). O SQLite ignora o bloqueio, mas ele já serializa as escritas."""
+    User.objects.select_for_update().only("pk").get(pk=user.pk)
+
+
 def _check_slot(user: User, starts_at, ends_at, exclude_id: int | None = None) -> None:
     if ends_at <= starts_at:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "O fim deve ser depois do início.")
@@ -69,6 +76,7 @@ def create_appointment(data: AppointmentIn, request: Request, user: User = Depen
     patient = get_patient_or_404(user, data.patient_id) if data.patient_id else None
     starts, ends = _aware(data.starts_at), _aware(data.ends_at)
     with transaction.atomic():
+        _lock_owner(user)
         _check_slot(user, starts, ends)
         a = Appointment.objects.create(
             owner=user, patient=patient, lead_name="" if patient else data.lead_name.strip(),
@@ -97,6 +105,7 @@ def update_appointment(appointment_id: int, data: AppointmentPatch, request: Req
     if fields.get("ends_at"):
         a.ends_at = _aware(fields["ends_at"])
     with transaction.atomic():
+        _lock_owner(user)
         if a.status != Appointment.Status.CANCELED:
             _check_slot(user, a.starts_at, a.ends_at, exclude_id=a.id)
         elif a.ends_at <= a.starts_at:
@@ -111,8 +120,9 @@ def update_appointment(appointment_id: int, data: AppointmentPatch, request: Req
 def set_status(appointment_id: int, data: StatusIn, request: Request, user: User = Depends(current_user)):
     if data.status not in STATUSES:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Status inválido.")
-    a = _own(user, appointment_id)
     with transaction.atomic():
+        _lock_owner(user)
+        a = _own(user, appointment_id)  # relido sob o bloqueio: o status pode ter mudado
         if a.status == Appointment.Status.CANCELED and data.status != Appointment.Status.CANCELED:
             _check_slot(user, a.starts_at, a.ends_at, exclude_id=a.id)  # reativar exige o horário livre
         a.status = data.status
