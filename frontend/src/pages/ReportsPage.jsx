@@ -48,7 +48,7 @@ function MonthlySection({ setError }) {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    if (!month) return
+    if (!month) { setData(null); return } // campo vazio: some o resumo do mês anterior
     let stale = false // troca rápida de mês: ignora a resposta antiga
     setLoading(true)
     api.reports
@@ -59,12 +59,22 @@ function MonthlySection({ setError }) {
     return () => { stale = true }
   }, [month, setError])
 
+  // Um único arquivo com três blocos, cada um com o próprio cabeçalho, separados por linha em branco.
   const exportCsv = () => {
+    const qty = (n, unit) => `${fmtNum(n)} ${unit}`
     const rows = [
-      ...data.patients.map((p) => ['Paciente', p.full_name, fmtDay(p.last_applied_at), p.applications, '', '']),
-      ...data.by_lot.map((r) => ['Lote', r.product_label, r.lot_number, `${fmtNum(r.total)} ${r.unit}`, r.applications, r.balance == null ? '' : `${fmtNum(r.balance)} ${r.unit}`]),
+      ...data.patients.map((p) => [p.full_name, fmtDay(p.last_applied_at), p.applications]),
+      [],
+      ['Produto', 'Total usado', 'Aplicações'],
+      ...data.by_product.map((r) => [r.product_label, qty(r.total, r.unit), r.applications]),
+      [],
+      ['Produto', 'Lote', 'Validade', 'Total usado', 'Aplicações', 'Saldo'],
+      ...data.by_lot.map((r) => [
+        r.product_label, r.lot_number, r.expires_on ? fmtDay(`${r.expires_on}T12:00:00`) : '', qty(r.total, r.unit),
+        r.applications, r.balance == null ? '' : qty(r.balance, r.unit),
+      ]),
     ]
-    downloadCsv(`mensal-${month}.csv`, ['Tipo', 'Nome/Produto', 'Última aplicação/Lote', 'Aplicações/Total', 'Aplicações', 'Saldo'], rows)
+    downloadCsv(`mensal-${month}.csv`, ['Paciente', 'Última aplicação', 'Aplicações'], rows)
   }
 
   return (

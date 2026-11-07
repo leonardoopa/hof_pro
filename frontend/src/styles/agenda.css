@@ -1,6 +1,6 @@
 /* Agenda semanal: grade simples em CSS. Usa as variáveis de tokens.css. */
 .agenda-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
-.agenda-bar h2 { margin: 0 8px; font-size: 16px; text-transform: capitalize; }
+.agenda-bar h2 { margin: 0 8px; font-size: 16px; }
 .agenda-scroll { overflow-x: auto; }
 .agenda-grid { display: grid; grid-template-columns: 52px repeat(7, minmax(110px, 1fr)); min-width: 860px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 .agenda-head { padding: 8px; text-align: center; font-size: 13px; color: var(--muted); border-bottom: 1px solid var(--line); }
@@ -11,8 +11,9 @@
 .agenda-slot { position: absolute; inset: 0; width: 100%; border: 0; background: transparent; padding: 0; cursor: pointer; }
 .agenda-slot:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .agenda-toggle { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
-.agenda-appt { position: absolute; left: 2px; right: 2px; z-index: 1; overflow: hidden; text-align: left; border: 0; border-radius: 8px; padding: 3px 6px; font-size: 12px; line-height: 1.25; background: var(--primary); color: var(--on-primary); cursor: pointer; }
-.agenda-appt small { display: block; opacity: 0.85; }
+.agenda-appt { position: absolute; z-index: 1; box-sizing: border-box; overflow: hidden; text-align: left; border: 0; border-radius: 8px; padding: 3px 6px; font-size: 12px; line-height: 1.25; background: var(--primary); color: var(--on-primary); cursor: pointer; }
+.agenda-appt small, .agenda-appt-name { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.agenda-appt small { opacity: 0.85; }
 .agenda-appt.confirmado { background: var(--ok); }
 .agenda-appt.realizado { background: var(--muted); }
 .agenda-appt.faltou { background: var(--warn); }
