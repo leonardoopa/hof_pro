@@ -209,6 +209,9 @@ test('estoque: cria produto e lote pela tela', async ({ page }) => {
   const product = page.getByRole('dialog', { name: 'Novo produto' })
   await product.getByLabel('Marca').fill('Marca E2E')
   await product.getByLabel('Nome').fill('Toxina teste')
+  await product.getByLabel('Número do lote').fill('L-PRIMEIRO')
+  await product.getByLabel('Validade').fill('2099-12-31')
+  await product.getByLabel(/^Quantidade/).fill('5')
   await product.getByRole('button', { name: 'Salvar' }).click()
   await expect(product).toHaveCount(0)
 
@@ -222,8 +225,38 @@ test('estoque: cria produto e lote pela tela', async ({ page }) => {
 
   await expect(page.locator('.inv-table').getByText('L-TELA')).toBeVisible()
   await expect(page.getByRole('button', { name: /Excluir/ })).toHaveCount(0) // produto se desativa; lote errado se ajusta com motivo
-  const [created] = await api.get('/inventory/lots?available=true')
-  expect(created).toMatchObject({ number: 'L-TELA', balance: 12.5 })
+  const lots = await api.get('/inventory/lots?available=true')
+  expect(lots.find((l) => l.number === 'L-TELA')).toMatchObject({ balance: 12.5 })
+  expect(errors).toEqual([])
+})
+
+test('estoque: cadastra o produto já com o primeiro lote', async ({ page }) => {
+  const errors = collectPageErrors(page)
+  const api = await signIn(page)
+  await page.goto('/estoque')
+
+  await page.getByRole('button', { name: 'Produto', exact: true }).click()
+  const product = page.getByRole('dialog', { name: 'Novo produto' })
+  await product.getByLabel('Marca').fill('Marca E2E')
+  await product.getByLabel('Nome').fill('Preenchedor com lote')
+  await product.getByRole('button', { name: 'Salvar' }).click()
+  await expect(product, 'sem o lote o formulário não envia').toBeVisible()
+  expect(await api.get('/inventory/products')).toEqual([])
+
+  await product.getByLabel('Número do lote').fill('L-NOVO')
+  await product.getByLabel('Validade').fill('2099-06-30')
+  await product.getByLabel('Quantidade (ml)').fill('2,5')
+  await product.getByRole('button', { name: 'Salvar' }).click()
+  await expect(product).toHaveCount(0)
+
+  const card = page.locator('.inv-product').filter({ hasText: 'Marca E2E Preenchedor com lote' })
+  const row = card.getByRole('row').filter({ hasText: 'L-NOVO' })
+  await expect(row).toContainText('30/06/2099')
+  await expect(row).toContainText(/2[.,]5 ml/)
+  const [created] = await api.get('/inventory/lots')
+  expect(created).toMatchObject({ number: 'L-NOVO', expires_on: '2099-06-30', initial_quantity: 2.5, balance: 2.5 })
+  const moves = await api.get(`/inventory/lots/${created.id}/movements`)
+  expect(moves.map((m) => [m.kind, m.delta, m.balance_after])).toEqual([['entrada', 2.5, 2.5]])
   expect(errors).toEqual([])
 })
 

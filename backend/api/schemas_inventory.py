@@ -9,12 +9,19 @@ KindKey = Literal["toxina", "preenchedor", "bioestimulador", "skinbooster", "out
 UnitKey = Literal["ml", "U"]
 
 
+class LotBase(BaseModel):
+    number: str = Field(min_length=1, max_length=40)
+    expires_on: date
+    quantity: Decimal = Field(gt=0, le=100000, max_digits=8, decimal_places=2)
+
+
 class ProductIn(BaseModel):
     brand: str = Field(min_length=1, max_length=80)
     name: str = Field(min_length=1, max_length=120)
     kind: KindKey = "preenchedor"
     unit: UnitKey = "ml"
     anvisa_registration: str = Field(default="", max_length=40)
+    lot: LotBase | None = None  # primeiro lote, criado na mesma transação do produto
 
 
 class ProductPatch(BaseModel):
@@ -36,11 +43,8 @@ class ProductOut(BaseModel):
     active: bool
 
 
-class LotIn(BaseModel):
+class LotIn(LotBase):
     product_id: int
-    number: str = Field(min_length=1, max_length=40)
-    expires_on: date
-    quantity: Decimal = Field(gt=0, le=100000, max_digits=8, decimal_places=2)
 
 
 class LotPatch(BaseModel):
@@ -61,6 +65,10 @@ class LotOut(BaseModel):
     balance: Qty
     expired: bool
     days_to_expire: int
+
+
+class ProductCreatedOut(ProductOut):
+    lot: LotOut | None  # o lote criado junto, para quem chamou já poder selecioná-lo
 
 
 class MovementOut(BaseModel):

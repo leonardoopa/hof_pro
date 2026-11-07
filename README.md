@@ -80,7 +80,7 @@ Testes:
   - resumo ao vivo: total de ml (preenchimentos), unidades (toxina) e número de áreas;
   - **Simular resultado**: comparação antes/depois ilustrativa, com divisor (suavização para toxina, volume local para preenchedores, clareamento do vinco nos sulcos).
 - **Região boca** (lábios) e **técnica / profundidade / lote** por ponto no mapa facial.
-- **Estoque**: produtos (marca, unidade, registro Anvisa) e lotes com validade e saldo; alerta de vencimento (30 dias); "Marcar como aplicado" dá baixa atômica nos lotes (bloqueia lote vencido, unidade incompatível e saldo insuficiente) e grava o **cartão de rastreabilidade** imprimível por paciente, com região e nome do ponto.
+- **Estoque**: produtos (marca, unidade, registro Anvisa), cadastrados já com o primeiro lote, e lotes com validade e saldo; alerta de vencimento (30 dias); "Marcar como aplicado" dá baixa atômica nos lotes (bloqueia lote vencido, unidade incompatível e saldo insuficiente) e grava o **cartão de rastreabilidade** imprimível por paciente, com região e nome do ponto.
 - **Prontuário / Termos**: termos versionados, assinatura desenhada no canvas (PNG), hash SHA-256 do conteúdo, data/hora e IP; autorização de uso de imagem separada e revogável; documento imprimível.
 - **Evolução**: comparação antes/depois de fotos do paciente, com alinhamento pelos olhos.
 - **Resumo e Orientações**: orientações pós-procedimento por tratamento, geradas a partir do plano, imprimíveis.

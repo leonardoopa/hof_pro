@@ -18,10 +18,12 @@ from ..printing import esc, page
 from ..schemas_inventory import (
     AlertsOut,
     ApplyOut,
+    LotBase,
     LotIn,
     LotOut,
     LotPatch,
     MovementOut,
+    ProductCreatedOut,
     ProductIn,
     ProductOut,
     ProductPatch,
@@ -66,6 +68,21 @@ def _own_lot(user: User, lot_id: int) -> Lot:
     return lot
 
 
+@transaction.atomic
+def register_lot(user: User, product: Product, data: LotBase) -> Lot:
+    """Cria o lote com a movimentação de entrada. Serve à entrada de lote e ao cadastro do produto com o primeiro lote."""
+    number = data.number.strip()
+    if Lot.objects.filter(product=product, number__iexact=number).exists():
+        raise HTTPException(status.HTTP_409_CONFLICT, "Já existe um lote com esse número para este produto.")
+    lot = Lot.objects.create(
+        product=product, number=number, expires_on=data.expires_on, initial_quantity=data.quantity, balance=data.quantity
+    )
+    LotMovement.objects.create(
+        lot=lot, kind=LotMovement.Kind.ENTRY, delta=data.quantity, balance_after=lot.balance, author=user, reason="Entrada do lote"
+    )
+    return lot
+
+
 def _check_lot_usable(lot: Lot, treatment: str, today) -> None:
     label = f"{lot.product.name} lote {lot.number}"
     if lot.expires_on < today:
@@ -99,10 +116,14 @@ def list_products(user: User = Depends(current_user)):
     return list(Product.objects.filter(owner=user))
 
 
-@router.post("/inventory/products", response_model=ProductOut, status_code=status.HTTP_201_CREATED)
+@router.post("/inventory/products", response_model=ProductCreatedOut, status_code=status.HTTP_201_CREATED)
 @orm
 def create_product(data: ProductIn, user: User = Depends(current_user)):
-    return Product.objects.create(owner=user, **data.model_dump())
+    with transaction.atomic():  # produto e primeiro lote: grava os dois ou nenhum
+        product = Product.objects.create(owner=user, **data.model_dump(exclude={"lot"}))
+        lot = register_lot(user, product, data.lot) if data.lot else None
+    created = _lot_out(lot, timezone.localdate()) if lot else None
+    return ProductCreatedOut(**ProductOut.model_validate(product).model_dump(), lot=created)
 
 
 @router.patch("/inventory/products/{product_id}", response_model=ProductOut)
@@ -133,19 +154,7 @@ def list_lots(product_id: int | None = None, available: bool = False, user: User
 @router.post("/inventory/lots", response_model=LotOut, status_code=status.HTTP_201_CREATED)
 @orm
 def create_lot(data: LotIn, user: User = Depends(current_user)):
-    product = _own_product(user, data.product_id)
-    if Lot.objects.filter(product=product, number__iexact=data.number.strip()).exists():
-        raise HTTPException(status.HTTP_409_CONFLICT, "Já existe um lote com esse número para este produto.")
-    lot = Lot.objects.create(
-        product=product,
-        number=data.number.strip(),
-        expires_on=data.expires_on,
-        initial_quantity=data.quantity,
-        balance=data.quantity,
-    )
-    LotMovement.objects.create(
-        lot=lot, kind=LotMovement.Kind.ENTRY, delta=data.quantity, balance_after=lot.balance, author=user, reason="Entrada do lote"
-    )
+    lot = register_lot(user, _own_product(user, data.product_id), data)
     return _lot_out(lot, timezone.localdate())
 
 
