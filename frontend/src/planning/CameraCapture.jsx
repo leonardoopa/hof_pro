@@ -3,7 +3,15 @@ import { useEffect, useRef, useState } from 'react'
 import Modal from '../components/Modal'
 import PoseGuide from '../evolution/PoseGuide'
 
-export default function CameraCapture({ onCapture, onClose }) {
+// Os padrões são os da foto do rosto; a foto da etiqueta troca câmera, textos e tira o guia de pose.
+export default function CameraCapture({
+  onCapture,
+  onClose,
+  title = 'Tirar foto do paciente',
+  hint = 'Rosto de frente, olhar para a câmera, cabelo afastado da testa e boa luz.',
+  facingMode = 'user',
+  poseGuide = true,
+}) {
   const videoRef = useRef(null)
   const [error, setError] = useState('')
   const [ready, setReady] = useState(false)
@@ -13,7 +21,7 @@ export default function CameraCapture({ onCapture, onClose }) {
     let stream
     let cancelled = false
     navigator.mediaDevices
-      ?.getUserMedia({ video: { facingMode: 'user', width: { ideal: 1920 }, height: { ideal: 1440 } } })
+      ?.getUserMedia({ video: { facingMode, width: { ideal: 1920 }, height: { ideal: 1440 } } })
       .then((s) => {
         if (cancelled) return s.getTracks().forEach((t) => t.stop())
         stream = s
@@ -25,7 +33,7 @@ export default function CameraCapture({ onCapture, onClose }) {
       cancelled = true
       stream?.getTracks().forEach((t) => t.stop())
     }
-  }, [])
+  }, [facingMode])
 
   function capture() {
     const video = videoRef.current
@@ -37,19 +45,21 @@ export default function CameraCapture({ onCapture, onClose }) {
   }
 
   return (
-    <Modal title="Tirar foto do paciente" onClose={onClose}>
+    <Modal title={title} onClose={onClose}>
       {error ? (
         <div className="alert error">{error}</div>
       ) : (
         <div className="camera-wrap">
           <video ref={videoRef} className="camera" autoPlay playsInline muted onLoadedMetadata={() => setReady(true)} />
-          {guide && <PoseGuide />}
+          {poseGuide && guide && <PoseGuide />}
         </div>
       )}
-      <p className="camera-hint">Rosto de frente, olhar para a câmera, cabelo afastado da testa e boa luz.</p>
-      <label className="guide-toggle">
-        <input type="checkbox" checked={guide} onChange={(e) => setGuide(e.target.checked)} /> Guia de pose (oval, olhos e eixo central)
-      </label>
+      <p className="camera-hint">{hint}</p>
+      {poseGuide && (
+        <label className="guide-toggle">
+          <input type="checkbox" checked={guide} onChange={(e) => setGuide(e.target.checked)} /> Guia de pose (oval, olhos e eixo central)
+        </label>
+      )}
       <div className="modal-actions">
         <button className="btn" onClick={onClose}>
           <X size={16} /> Fechar

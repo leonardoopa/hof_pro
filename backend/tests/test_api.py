@@ -100,6 +100,23 @@ def test_photo_upload_is_private(client, auth, other_auth, patient):
     assert bad.status_code == 422
 
 
+def test_label_photo_is_its_own_kind(client, auth, patient):
+    url = f"/api/patients/{patient['id']}/photos"
+
+    def send(kind):
+        return client.post(url, files={"file": ("foto.png", png_bytes(), "image/png")}, data={"kind": kind}, headers=auth)
+
+    face, label = send("frontal"), send("etiqueta")
+    assert face.status_code == 201 and label.status_code == 201, label.text
+    assert label.json()["kind"] == "etiqueta"
+
+    listed = client.get(url, headers=auth).json()
+    assert [(p["id"], p["kind"]) for p in listed] == [(label.json()["id"], "etiqueta"), (face.json()["id"], "frontal")]
+
+    assert send("caixa").status_code == 422
+    assert len(client.get(url, headers=auth).json()) == 2
+
+
 def test_plan_totals_units_and_validation(client, auth, other_auth, patient):
     pid = patient["id"]
     plan_body = {

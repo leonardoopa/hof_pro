@@ -50,6 +50,7 @@ class PatientPhoto(models.Model):
         PROFILE_RIGHT = "perfil_direito", "Perfil direito"
         PROFILE_LEFT = "perfil_esquerdo", "Perfil esquerdo"
         OTHER = "outra", "Outra"
+        LABEL = "etiqueta", "Etiqueta"  # etiqueta da caixa do produto (marca, lote, validade), não é foto do rosto
 
     patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name="photos")
     image = models.ImageField(upload_to=photo_path)

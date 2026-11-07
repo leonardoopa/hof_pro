@@ -186,6 +186,90 @@ test('evolução: com duas fotos abre a comparação antes e depois', async ({ p
   expect(appErrors(errors)).toEqual([])
 })
 
+test('evolução: foto da etiqueta fica no próprio card e fora da comparação', async ({ page }) => {
+  const errors = collectPageErrors(page)
+  await blockFaceDetection(page)
+  const api = await signIn(page)
+  const patient = await createPatient(api)
+  const path = `/patients/${patient.id}/photos`
+  await api.upload(path, await syntheticPhoto(page), 'etiqueta')
+  await page.goto(`/pacientes/${patient.id}/evolucao`)
+  const labels = page.getByRole('region', { name: 'Etiquetas dos produtos' })
+  const thumbs = labels.getByRole('button', { name: /^Ampliar etiqueta de / })
+  // A etiqueta não conta como foto do rosto: a comparação continua vazia e o card aparece abaixo dela.
+  await expect(page.getByText('Este paciente ainda não tem fotos.')).toBeVisible()
+  await expect(thumbs).toHaveCount(1)
+
+  const older = await api.upload(path, await syntheticPhoto(page), 'frontal')
+  const newer = await api.upload(path, await syntheticPhoto(page, { width: 600, height: 800 }), 'frontal')
+  await page.reload()
+  const pickers = page.locator('.evo-pickers select')
+  const comparesFaces = async () => {
+    await expect(pickers.nth(0)).toHaveValue(String(older.id))
+    await expect(pickers.nth(1)).toHaveValue(String(newer.id))
+    await expect(pickers.nth(0).locator('option')).toHaveCount(2)
+    await expect(pickers.nth(1).locator('option')).toHaveCount(2)
+  }
+  await comparesFaces()
+  await expect(page.getByLabel('Tipo da nova foto').locator('option', { hasText: 'Etiqueta' })).toHaveCount(0)
+
+  // Pela tela: o botão do card abre o seletor de arquivo e a foto vai como etiqueta, a mais nova primeiro.
+  const chooser = page.waitForEvent('filechooser')
+  await labels.getByRole('button', { name: 'Enviar foto da etiqueta' }).click()
+  await (await chooser).setFiles(await syntheticPhoto(page, { width: 1000, height: 700 }))
+  await expect(toast(page, 'Etiqueta adicionada.')).toBeVisible()
+  await expect(thumbs).toHaveCount(2)
+  await expect(labels.locator('.evo-label-date').first()).toContainText(todayBR())
+  const listed = await api.get(path)
+  expect(listed.map((p) => p.kind)).toEqual(['etiqueta', 'frontal', 'frontal', 'etiqueta'])
+  await comparesFaces()
+  // Com a etiqueta como foto mais nova, a escolha padrão continua nas fotos do rosto.
+  await page.reload()
+  await comparesFaces()
+  await expect(page.locator('canvas').first()).toBeVisible()
+
+  await thumbs.first().click()
+  const dialog = page.getByRole('dialog', { name: /^Etiqueta de / })
+  await expect(dialog.locator('img')).toHaveJSProperty('naturalWidth', 1000)
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
+  await thumbs.first().focus()
+  await page.keyboard.press('Enter')
+  await expect(dialog).toBeVisible()
+  await dialog.getByRole('button', { name: 'Fechar' }).click()
+  await expect(dialog).toHaveCount(0)
+  expect(appErrors(errors)).toEqual([])
+})
+
+test('evolução: a câmera da etiqueta usa a câmera traseira e não mostra o guia de pose', async ({ page }) => {
+  const errors = collectPageErrors(page)
+  await blockFaceDetection(page)
+  const api = await signIn(page)
+  const patient = await createPatient(api)
+  await page.addInitScript(() => {
+    const original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices)
+    navigator.mediaDevices.getUserMedia = (constraints) => {
+      window.__facingMode = constraints.video.facingMode
+      return original(constraints)
+    }
+  })
+  await page.goto(`/pacientes/${patient.id}/evolucao`)
+
+  await page.getByRole('button', { name: 'Tirar foto da etiqueta' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Tirar foto da etiqueta' })
+  await expect(dialog.getByText('Etiqueta inteira no quadro, sem reflexo, com lote e validade legíveis.')).toBeVisible()
+  await expect(dialog.getByText('Guia de pose')).toHaveCount(0)
+  await expect(dialog.locator('.pose-guide')).toHaveCount(0)
+  await expect(dialog.getByRole('button', { name: 'Capturar' })).toBeEnabled({ timeout: 15_000 })
+  expect(await page.evaluate(() => window.__facingMode)).toBe('environment')
+  await dialog.getByRole('button', { name: 'Capturar' }).click()
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByRole('region', { name: 'Etiquetas dos produtos' }).getByRole('button', { name: /^Ampliar etiqueta de / })).toHaveCount(1)
+  await expect(page.getByText('Este paciente ainda não tem fotos.')).toBeVisible()
+  expect((await api.get(`/patients/${patient.id}/photos`)).map((p) => p.kind)).toEqual(['etiqueta'])
+  expect(appErrors(errors)).toEqual([])
+})
+
 test('resumo e orientações: gerado a partir de um plano', async ({ page }) => {
   const errors = collectPageErrors(page)
   const api = await signIn(page)
