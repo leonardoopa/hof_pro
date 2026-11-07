@@ -6,17 +6,21 @@ const clamp = (n, min, max) => Math.min(max, Math.max(min, n))
 
 const inZone = (p, zone) => p.region === zone.region && p.side === zone.side
 
-/** Janela (zoom + deslocamento, em frações da foto) que enquadra os pontos de uma zona (região + lado). */
-function viewFor(points, zone) {
+/**
+ * Janela (zoom + deslocamento, em frações da foto) que enquadra uma zona (região + lado). Entram os pontos colocados e a
+ * posição sugerida da região: a região vazia também amplia, e o enquadramento não pula quando o primeiro ponto entra.
+ * A folga deixa espaço para os controles que ficam sobre a imagem.
+ */
+function viewFor(points, zone, template) {
   if (!zone) return { s: 1, tx: 0, ty: 0 }
-  const pts = points.filter((p) => inZone(p, zone))
+  const pts = [...points, ...template].filter((p) => inZone(p, zone))
   if (!pts.length) return { s: 1, tx: 0, ty: 0 }
   const xs = pts.map((p) => p.x)
   const ys = pts.map((p) => p.y)
   const [x0, x1] = [Math.min(...xs), Math.max(...xs)]
   const [y0, y1] = [Math.min(...ys), Math.max(...ys)]
-  const w = Math.max(x1 - x0 + 0.14, 0.4)
-  const h = Math.max(y1 - y0 + 0.14, 0.4)
+  const w = Math.max(x1 - x0 + 0.2, 0.42)
+  const h = Math.max(y1 - y0 + 0.2, 0.42)
   const s = clamp(Math.min(1 / w, 1 / h), 1, 3.2)
   return {
     s,
@@ -29,6 +33,20 @@ const centroid = (pts) => ({
   x: pts.reduce((sum, p) => sum + p.x, 0) / pts.length,
   y: pts.reduce((sum, p) => sum + p.y, 0) / pts.length,
 })
+
+/** Centro de cada região (e lado) na imagem atual, a partir das posições sugeridas. */
+function regionAnchors(template) {
+  const groups = new Map()
+  for (const p of template) {
+    const key = `${p.region}|${p.side}`
+    groups.set(key, [...(groups.get(key) ?? []), p])
+  }
+  return [...groups.values()].map((pts) => {
+    const region = REGIONS.find((r) => r.key === pts[0].region)
+    const short = region?.short ?? region?.label ?? pts[0].region
+    return { region: pts[0].region, side: pts[0].side, name: pts[0].side === 'C' ? short : `${short} ${pts[0].side}`, ...centroid(pts) }
+  })
+}
 
 export default function FaceStage({
   imageUrl,
@@ -44,6 +62,7 @@ export default function FaceStage({
   simUrl,
   split,
   showMarks = true,
+  template = [],
   onPickRegion,
   onHoverRegion,
   onSelectPoint,
@@ -54,7 +73,7 @@ export default function FaceStage({
   const dragging = useRef(null)
   // O enquadramento só muda ao trocar de região ou de número de pontos: recalcular a cada arraste tiraria o ponto de baixo do cursor.
   const zoneCount = zone ? points.filter((p) => inZone(p, zone)).length : 0
-  const { s, tx, ty } = useMemo(() => viewFor(points, zone), [zone?.region, zone?.side, zoneCount])
+  const { s, tx, ty } = useMemo(() => viewFor(points, zone, template), [zone?.region, zone?.side, zoneCount, template])
 
   // Tamanho do palco em px: o layout dos hotspots mede distâncias na tela, não na foto.
   const stageRef = useRef(null)
@@ -71,6 +90,21 @@ export default function FaceStage({
       x: clamp((e.clientX - rect.left) / rect.width, 0, 1),
       y: clamp((e.clientY - rect.top) / rect.height, 0, 1),
     }
+  }
+
+  // Visão geral: tocar no rosto abre a região mais próxima do toque, mesmo sem nenhum ponto colocado.
+  const anchors = useMemo(() => regionAnchors(template), [template])
+  const picking = !zone && showMarks && anchors.length > 0 && Boolean(onPickRegion)
+  const [aim, setAim] = useState(null) // região sob o cursor
+  const nearest = (e) => {
+    const { x, y } = toNormalized(e)
+    const reach = Math.max(44, size.width * 0.13)
+    let best = null
+    for (const a of anchors) {
+      const d = Math.hypot((a.x - x) * size.width, (a.y - y) * size.height)
+      if (d <= reach && d < (best?.d ?? Infinity)) best = { ...a, d }
+    }
+    return best
   }
 
   // Pontos desenhados sobre a foto. Ocultos, sobra só a foto (ou a simulação); o zoom continua seguindo os pontos.
@@ -103,9 +137,22 @@ export default function FaceStage({
   return (
     <div
       ref={stageRef}
-      className={`stage ${adding ? 'adding' : ''} ${readOnly ? 'read-only' : ''}`}
+      className={`stage ${adding ? 'adding' : ''} ${readOnly ? 'read-only' : ''} ${picking && aim ? 'aiming' : ''}`}
       style={{ '--aspect': aspect }}
+      onPointerMove={(e) => {
+        if (!picking || e.pointerType !== 'mouse') return
+        const next = nearest(e)
+        setAim((cur) => (cur?.region === next?.region && cur?.side === next?.side ? cur : next))
+      }}
+      onPointerLeave={() => setAim(null)}
       onClick={(e) => {
+        if (picking) {
+          if (e.target.closest('.hotspot')) return
+          const target = nearest(e)
+          setAim(null)
+          if (target) onPickRegion(target.region, target.side)
+          return
+        }
         if (!adding || !zone || e.target.closest('.pt')) return
         const { x, y } = toNormalized(e)
         onAddPoint(x, y)
@@ -138,6 +185,13 @@ export default function FaceStage({
                 style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%`, '--c': treatmentOf(p.treatment).color }}
               />
             ))}
+
+        {picking && aim && (
+          <span className="region-aim" style={{ left: `${aim.x * 100}%`, top: `${aim.y * 100}%` }} aria-hidden="true">
+            <i />
+            <b>{aim.name}</b>
+          </span>
+        )}
 
         {groups.map(({ region: { key, label }, side, total, shortName }, i) => {
           const name = side === 'C' ? label : `${label} (${SIDE_LABEL[side].toLowerCase()})`
