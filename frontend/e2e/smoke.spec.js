@@ -35,7 +35,7 @@ test('anamnese: "Sim" exige descrição e depois salva', async ({ page }) => {
 
   await page.getByRole('group', { name: question.text }).getByRole('button', { name: 'Sim' }).click()
   await page.getByRole('button', { name: 'Salvar anamnese' }).click()
-  await expect(page.getByText('Descreva a resposta de todas as perguntas')).toBeVisible()
+  await expect(page.getByText('Descreva a resposta de todas as perguntas')).toBeInViewport()
 
   await page.getByLabel(`${question.text} — ${question.detail_prompt}`).fill('Alergia a lidocaína')
   await page.getByRole('button', { name: 'Salvar anamnese' }).click()
@@ -43,6 +43,30 @@ test('anamnese: "Sim" exige descrição e depois salva', async ({ page }) => {
   const saved = await api.get(`/patients/${patient.id}/anamnesis`)
   expect(saved.answers).toContainEqual({ question_id: question.id, answer: true, detail: 'Alergia a lidocaína' })
   expect(errors).toEqual([])
+})
+
+test('erro ao salvar: a mensagem vem para a tela, e a página só rola se precisar', async ({ page }) => {
+  const api = await signIn(page)
+  const patient = await createPatient(api)
+  await page.route(`**/api/patients/${patient.id}/anamnesis`, (route) =>
+    route.request().method() === 'PUT' ? route.fulfill({ status: 500, json: { detail: 'Falha simulada' } }) : route.continue(),
+  )
+  await page.goto(`/pacientes/${patient.id}/anamnese`)
+  const save = page.getByRole('button', { name: 'Salvar anamnese' })
+  const message = page.getByRole('alert').filter({ hasText: 'Falha simulada' })
+
+  // Clique pelo DOM, que não rola até o botão: a mensagem nasce na tela e nada se mexe.
+  await expect(save).toBeVisible()
+  await page.evaluate(() => window.scrollTo(0, 100))
+  await save.evaluate((button) => button.click())
+  await expect(message).toBeInViewport()
+  expect(await page.evaluate(() => window.scrollY)).toBe(100)
+
+  // Com o botão no fim da página, a mensagem fica fora da tela até o erro voltar.
+  await save.scrollIntoViewIfNeeded()
+  await expect(message).not.toBeInViewport()
+  await save.click()
+  await expect(message).toBeInViewport()
 })
 
 test('anamnese: cada alteração salva vira uma versão e as anteriores continuam lá', async ({ page }) => {
@@ -162,6 +186,147 @@ test('evolução: com duas fotos abre a comparação antes e depois', async ({ p
   expect(appErrors(errors)).toEqual([])
 })
 
+test('evolução: foto da etiqueta fica no próprio card e fora da comparação', async ({ page }) => {
+  const errors = collectPageErrors(page)
+  await blockFaceDetection(page)
+  const api = await signIn(page)
+  const patient = await createPatient(api)
+  const path = `/patients/${patient.id}/photos`
+  await api.upload(path, await syntheticPhoto(page), 'etiqueta')
+  await page.goto(`/pacientes/${patient.id}/evolucao`)
+  const labels = page.getByRole('region', { name: 'Etiquetas dos produtos' })
+  const thumbs = labels.getByRole('button', { name: /^Ampliar etiqueta de / })
+  // A etiqueta não conta como foto do rosto: a comparação continua vazia e o card aparece abaixo dela.
+  await expect(page.getByText('Este paciente ainda não tem fotos.')).toBeVisible()
+  await expect(thumbs).toHaveCount(1)
+
+  const older = await api.upload(path, await syntheticPhoto(page), 'frontal')
+  const newer = await api.upload(path, await syntheticPhoto(page, { width: 600, height: 800 }), 'frontal')
+  await page.reload()
+  const pickers = page.locator('.evo-pickers select')
+  const comparesFaces = async () => {
+    await expect(pickers.nth(0)).toHaveValue(String(older.id))
+    await expect(pickers.nth(1)).toHaveValue(String(newer.id))
+    await expect(pickers.nth(0).locator('option')).toHaveCount(2)
+    await expect(pickers.nth(1).locator('option')).toHaveCount(2)
+  }
+  await comparesFaces()
+  await expect(page.getByLabel('Tipo da nova foto').locator('option', { hasText: 'Etiqueta' })).toHaveCount(0)
+
+  // Pela tela: o botão do card abre o seletor de arquivo e a foto vai como etiqueta, a mais nova primeiro.
+  const chooser = page.waitForEvent('filechooser')
+  await labels.getByRole('button', { name: 'Enviar foto da etiqueta' }).click()
+  await (await chooser).setFiles(await syntheticPhoto(page, { width: 1000, height: 700 }))
+  await expect(toast(page, 'Etiqueta adicionada.')).toBeVisible()
+  await expect(thumbs).toHaveCount(2)
+  await expect(labels.locator('.evo-label-date').first()).toContainText(todayBR())
+  const listed = await api.get(path)
+  expect(listed.map((p) => p.kind)).toEqual(['etiqueta', 'frontal', 'frontal', 'etiqueta'])
+  await comparesFaces()
+  // Com a etiqueta como foto mais nova, a escolha padrão continua nas fotos do rosto.
+  await page.reload()
+  await comparesFaces()
+  await expect(page.locator('canvas').first()).toBeVisible()
+
+  await thumbs.first().click()
+  const dialog = page.getByRole('dialog', { name: /^Etiqueta de / })
+  await expect(dialog.locator('img')).toHaveJSProperty('naturalWidth', 1000)
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
+  await thumbs.first().focus()
+  await page.keyboard.press('Enter')
+  await expect(dialog).toBeVisible()
+  await dialog.getByRole('button', { name: 'Fechar' }).click()
+  await expect(dialog).toHaveCount(0)
+  expect(appErrors(errors)).toEqual([])
+})
+
+test('evolução: a câmera da etiqueta usa a câmera traseira e não mostra o guia de pose', async ({ page }) => {
+  const errors = collectPageErrors(page)
+  await blockFaceDetection(page)
+  const api = await signIn(page)
+  const patient = await createPatient(api)
+  await page.addInitScript(() => {
+    const original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices)
+    navigator.mediaDevices.getUserMedia = (constraints) => {
+      window.__facingMode = constraints.video.facingMode
+      return original(constraints)
+    }
+  })
+  await page.goto(`/pacientes/${patient.id}/evolucao`)
+
+  await page.getByRole('button', { name: 'Tirar foto da etiqueta' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Tirar foto da etiqueta' })
+  await expect(dialog.getByText('Etiqueta inteira no quadro, sem reflexo, com lote e validade legíveis.')).toBeVisible()
+  await expect(dialog.getByText('Guia de pose')).toHaveCount(0)
+  await expect(dialog.locator('.pose-guide')).toHaveCount(0)
+  await expect(dialog.getByRole('button', { name: 'Capturar' })).toBeEnabled({ timeout: 15_000 })
+  expect(await page.evaluate(() => window.__facingMode)).toBe('environment')
+  await dialog.getByRole('button', { name: 'Capturar' }).click()
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByRole('region', { name: 'Etiquetas dos produtos' }).getByRole('button', { name: /^Ampliar etiqueta de / })).toHaveCount(1)
+  await expect(page.getByText('Este paciente ainda não tem fotos.')).toBeVisible()
+  expect((await api.get(`/patients/${patient.id}/photos`)).map((p) => p.kind)).toEqual(['etiqueta'])
+  expect(appErrors(errors)).toEqual([])
+})
+
+test('evolução: com a etiqueta mais nova o planejamento abre na frontal, e ocultar dados esconde as etiquetas', async ({ page }) => {
+  const errors = collectPageErrors(page)
+  await blockFaceDetection(page)
+  const api = await signIn(page)
+  const patient = await createPatient(api)
+  const path = `/patients/${patient.id}/photos`
+  await api.upload(path, await syntheticPhoto(page, { width: 800, height: 1000 }), 'frontal')
+  await api.upload(path, await syntheticPhoto(page, { width: 1000, height: 700 }), 'etiqueta')
+  await page.goto(`/pacientes/${patient.id}/planejamento`)
+  await expect(page.getByAltText('Foto frontal do paciente')).toHaveJSProperty('naturalWidth', 800) // não a etiqueta
+
+  await page.getByRole('link', { name: 'Evolução' }).click()
+  const labels = page.getByRole('region', { name: 'Etiquetas dos produtos' })
+  await expect(labels.locator('img')).toHaveCount(1)
+  await page.getByRole('button', { name: 'Ocultar dados' }).click()
+  await page.getByRole('dialog', { name: 'Ocultar dados do paciente' }).getByRole('button', { name: 'Ocultar dados' }).click()
+  await expect(page.getByRole('heading', { name: 'Fotos ocultas' })).toBeVisible()
+  await expect(labels).toHaveCount(0)
+  await page.getByRole('button', { name: 'Mostrar dados' }).click()
+  await expect(labels.locator('img')).toHaveCount(1)
+  expect(appErrors(errors)).toEqual([])
+})
+
+test('evolução: falha ao enviar a etiqueta mostra o erro e os botões voltam a funcionar', async ({ page }) => {
+  const errors = collectPageErrors(page)
+  await blockFaceDetection(page)
+  const api = await signIn(page)
+  const patient = await createPatient(api)
+  await page.goto(`/pacientes/${patient.id}/evolucao`)
+  const labels = page.getByRole('region', { name: 'Etiquetas dos produtos' })
+  const send = labels.getByRole('button', { name: 'Enviar foto da etiqueta' })
+  const thumbs = labels.getByRole('button', { name: /^Ampliar etiqueta de / })
+  const sendLabel = async () => {
+    const chooser = page.waitForEvent('filechooser')
+    await send.click()
+    await (await chooser).setFiles(await syntheticPhoto(page))
+  }
+
+  const photos = '**/api/patients/*/photos'
+  await page.route(photos, (route) =>
+    route.request().method() === 'POST' ? route.fulfill({ status: 500, contentType: 'text/plain', body: 'Internal Server Error' }) : route.fallback(),
+  )
+  await sendLabel()
+  await expect(page.getByRole('alert')).toContainText('500')
+  await expect(send).toBeEnabled()
+  await expect(labels.getByRole('button', { name: 'Tirar foto da etiqueta' })).toBeEnabled()
+  await expect(thumbs).toHaveCount(0)
+
+  await page.unroute(photos)
+  await sendLabel()
+  await expect(toast(page, 'Etiqueta adicionada.')).toBeVisible()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await expect(thumbs).toHaveCount(1)
+  expect((await api.get(`/patients/${patient.id}/photos`)).map((p) => p.kind)).toEqual(['etiqueta'])
+  expect(appErrors(errors).filter((line) => !line.includes('status of 500'))).toEqual([])
+})
+
 test('resumo e orientações: gerado a partir de um plano', async ({ page }) => {
   const errors = collectPageErrors(page)
   const api = await signIn(page)
@@ -185,6 +350,9 @@ test('estoque: cria produto e lote pela tela', async ({ page }) => {
   const product = page.getByRole('dialog', { name: 'Novo produto' })
   await product.getByLabel('Marca').fill('Marca E2E')
   await product.getByLabel('Nome').fill('Toxina teste')
+  await product.getByLabel('Número do lote').fill('L-PRIMEIRO')
+  await product.getByLabel('Validade').fill('2099-12-31')
+  await product.getByLabel(/^Quantidade/).fill('5')
   await product.getByRole('button', { name: 'Salvar' }).click()
   await expect(product).toHaveCount(0)
 
@@ -198,9 +366,71 @@ test('estoque: cria produto e lote pela tela', async ({ page }) => {
 
   await expect(page.locator('.inv-table').getByText('L-TELA')).toBeVisible()
   await expect(page.getByRole('button', { name: /Excluir/ })).toHaveCount(0) // produto se desativa; lote errado se ajusta com motivo
-  const [created] = await api.get('/inventory/lots?available=true')
-  expect(created).toMatchObject({ number: 'L-TELA', balance: 12.5 })
+  const lots = await api.get('/inventory/lots?available=true')
+  expect(lots.find((l) => l.number === 'L-TELA')).toMatchObject({ balance: 12.5 })
   expect(errors).toEqual([])
+})
+
+test('estoque: cadastra o produto já com o primeiro lote', async ({ page }) => {
+  const errors = collectPageErrors(page)
+  const api = await signIn(page)
+  await page.goto('/estoque')
+
+  await page.getByRole('button', { name: 'Produto', exact: true }).click()
+  const product = page.getByRole('dialog', { name: 'Novo produto' })
+  await product.getByLabel('Marca').fill('Marca E2E')
+  await product.getByLabel('Nome').fill('Preenchedor com lote')
+  await product.getByRole('button', { name: 'Salvar' }).click()
+  await expect(product, 'sem o lote o formulário não envia').toBeVisible()
+  expect(await api.get('/inventory/products')).toEqual([])
+
+  await product.getByLabel('Número do lote').fill('L-NOVO')
+  await product.getByLabel('Validade').fill('2099-06-30')
+  await product.getByLabel('Quantidade (ml)').fill('2,5')
+  await product.getByRole('button', { name: 'Salvar' }).click()
+  await expect(product).toHaveCount(0)
+
+  const card = page.locator('.inv-product').filter({ hasText: 'Marca E2E Preenchedor com lote' })
+  const row = card.getByRole('row').filter({ hasText: 'L-NOVO' })
+  await expect(row).toContainText('30/06/2099')
+  await expect(row).toContainText(/2[.,]5 ml/)
+  const [created] = await api.get('/inventory/lots')
+  expect(created).toMatchObject({ number: 'L-NOVO', expires_on: '2099-06-30', initial_quantity: 2.5, balance: 2.5 })
+  const moves = await api.get(`/inventory/lots/${created.id}/movements`)
+  expect(moves.map((m) => [m.kind, m.delta, m.balance_after])).toEqual([['entrada', 2.5, 2.5]])
+  expect(errors).toEqual([])
+})
+
+test('estoque: primeiro lote perto de vencer entra nos alertas, e a entrada com o mesmo número dá 409 no modal', async ({ page }) => {
+  const errors = collectPageErrors(page)
+  await signIn(page)
+  await page.goto('/estoque')
+
+  await page.getByRole('button', { name: 'Produto', exact: true }).click()
+  const product = page.getByRole('dialog', { name: 'Novo produto' })
+  await product.getByLabel('Marca').fill('Marca E2E')
+  await product.getByLabel('Nome').fill('Lote perto de vencer')
+  const soon = new Date(Date.now() + 10 * 86_400_000).toLocaleDateString('sv-SE') // dentro dos 30 dias do alerta
+  await product.getByLabel('Número do lote').fill('L-PERTO')
+  await product.getByLabel('Validade').fill(soon)
+  await product.getByLabel('Quantidade (ml)').fill('0,5')
+  await product.getByRole('button', { name: 'Salvar' }).click()
+  await expect(product).toHaveCount(0)
+  await expect(page.getByRole('row').filter({ hasText: 'L-PERTO' })).toContainText(/0[.,]5 ml/)
+  const soonBR = soon.split('-').reverse().join('/')
+  await expect(page.locator('.inv-alerts')).toContainText(`Marca E2E Lote perto de vencer (lote L-PERTO, ${soonBR})`)
+
+  // O número do primeiro lote vale para as próximas entradas do mesmo produto, sem diferenciar maiúsculas.
+  await page.getByRole('button', { name: 'Entrada de lote' }).click()
+  const entry = page.getByRole('dialog', { name: 'Entrada de lote' })
+  await entry.getByLabel('Produto').selectOption({ label: 'Marca E2E Lote perto de vencer' })
+  await entry.getByLabel('Número do lote').fill('l-perto')
+  await entry.getByLabel('Validade').fill('2099-12-31')
+  await entry.getByLabel(/^Quantidade/).fill('1')
+  await entry.getByRole('button', { name: 'Registrar entrada' }).click()
+  await expect(entry.getByRole('alert')).toContainText('Já existe um lote com esse número para este produto.')
+  await expect(entry).toBeVisible()
+  expect(errors.filter((line) => !line.includes('status of 409'))).toEqual([])
 })
 
 test('relatórios: abre e exporta o CSV de uso', async ({ page }) => {
@@ -211,7 +441,9 @@ test('relatórios: abre e exporta o CSV de uso', async ({ page }) => {
   await page.goto('/relatorios')
   await expect(page.getByRole('heading', { name: 'Relatórios' })).toBeVisible()
 
-  const exportButton = page.getByRole('button', { name: 'Exportar CSV' }).first()
+  // Cada seção tem o próprio "Exportar CSV": o relatório mensal vem antes do de uso.
+  const usage = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Uso por lote e produto' }) })
+  const exportButton = usage.getByRole('button', { name: 'Exportar CSV' })
   await expect(exportButton, 'a aplicação de hoje precisa entrar no período padrão').toBeEnabled()
   const [download] = await Promise.all([page.waitForEvent('download'), exportButton.click()])
   expect(download.suggestedFilename()).toMatch(/^uso-.*\.csv$/)

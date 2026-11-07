@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 
-export default function Modal({ title, onClose, children }) {
+export default function Modal({ title, onClose, className = '', children }) {
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', onKey)
@@ -9,7 +9,7 @@ export default function Modal({ title, onClose, children }) {
 
   return (
     <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label={title}>
+      <div className={`modal ${className}`.trim()} role="dialog" aria-modal="true" aria-label={title}>
         <h2>{title}</h2>
         {children}
       </div>

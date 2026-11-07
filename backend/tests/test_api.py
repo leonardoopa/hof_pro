@@ -100,6 +100,40 @@ def test_photo_upload_is_private(client, auth, other_auth, patient):
     assert bad.status_code == 422
 
 
+def test_label_photo_is_its_own_kind(client, auth, patient):
+    url = f"/api/patients/{patient['id']}/photos"
+
+    def send(kind):
+        return client.post(url, files={"file": ("foto.png", png_bytes(), "image/png")}, data={"kind": kind}, headers=auth)
+
+    face, label = send("frontal"), send("etiqueta")
+    assert face.status_code == 201 and label.status_code == 201, label.text
+    assert label.json()["kind"] == "etiqueta"
+
+    listed = client.get(url, headers=auth).json()
+    assert [(p["id"], p["kind"]) for p in listed] == [(label.json()["id"], "etiqueta"), (face.json()["id"], "frontal")]
+
+    assert send("caixa").status_code == 422
+    assert len(client.get(url, headers=auth).json()) == 2
+
+
+def test_label_photo_file_is_private_and_audited(client, auth, other_auth, patient):
+    from apps.audit.models import AccessLog
+
+    up = client.post(
+        f"/api/patients/{patient['id']}/photos",
+        files={"file": ("etiqueta.png", png_bytes(), "image/png")},
+        data={"kind": "etiqueta"},
+        headers=auth,
+    )
+    assert up.status_code == 201, up.text
+    file_url = f"/api/photos/{up.json()['id']}/file"
+    assert client.get(file_url, headers=other_auth).status_code == 404  # etiqueta de outro profissional
+    assert client.get(file_url, headers=auth).headers["content-type"] == "image/jpeg"
+    # Ver a etiqueta fica na auditoria como qualquer foto; o acesso negado não gera registro.
+    assert list(AccessLog.objects.values_list("action", "resource", "resource_id")) == [("visualizar", "foto", up.json()["id"])]
+
+
 def test_plan_totals_units_and_validation(client, auth, other_auth, patient):
     pid = patient["id"]
     plan_body = {

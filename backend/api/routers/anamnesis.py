@@ -21,7 +21,8 @@ def _out(anamnesis: Anamnesis | None) -> AnamnesisOut:
     if anamnesis is None:
         return AnamnesisOut(answers=[], notes="", updated_at=None, version=None)
     return AnamnesisOut(
-        answers=[AnswerOut.model_validate(a) for a in anamnesis.answers.all()],
+        # Só o que o formulário mostra e devolve ao salvar. As demais respostas aparecem nas versões.
+        answers=[AnswerOut.model_validate(a) for a in anamnesis.answers.filter(question__active=True)],
         notes=anamnesis.notes,
         updated_at=anamnesis.updated_at,
         version=anamnesis.versions.values_list("number", flat=True).first(),
@@ -59,6 +60,8 @@ def save_anamnesis(patient_id: int, data: AnamnesisIn, user: User = Depends(curr
     with transaction.atomic():
         anamnesis, created = Anamnesis.objects.get_or_create(patient=patient)
         current = {a.question_id: (a.answer, a.detail) for a in anamnesis.answers.all()}
+        # Pergunta desativada sai do formulário, mas a resposta já dada continua valendo.
+        answers |= {question_id: value for question_id, value in current.items() if question_id not in questions}
         if created or data.notes != anamnesis.notes or answers != current:
             anamnesis.notes = data.notes
             anamnesis.save()  # o UPDATE trava a linha: dois salvamentos ao mesmo tempo não pegam o mesmo número de versão

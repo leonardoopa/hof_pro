@@ -56,6 +56,67 @@ def test_inventory_isolation_and_lot_rules(client, auth, other_auth):
     assert client.patch(f"/api/inventory/lots/{first.json()['id']}", json={"balance": 5}, headers=other_auth).status_code == 404
 
 
+def test_product_with_first_lot_creates_lot_and_entry(client, auth, other_auth):
+    expires = (timezone.localdate() + timedelta(days=200)).isoformat()
+    prod = product(client, auth, lot={"number": " P1 ", "expires_on": expires, "quantity": 12.5})
+    first = prod["lot"]
+    assert (first["product_id"], first["number"], first["expires_on"]) == (prod["id"], "P1", expires)
+    assert (first["initial_quantity"], first["balance"], first["unit"]) == (12.5, 12.5, "U")
+    assert client.get(f"/api/inventory/lots?product_id={prod['id']}", headers=auth).json() == [first]
+    moves = client.get(f"/api/inventory/lots/{first['id']}/movements", headers=auth).json()
+    assert [(m["kind"], m["delta"], m["balance_after"], m["reason"], m["author"]) for m in moves] == [
+        ("entrada", 12.5, 12.5, "Entrada do lote", "Ana Souza"),
+    ]
+    assert lot(client, auth, prod["id"], "p1").status_code == 409  # mesma regra de número da entrada de lote
+    assert "lot" not in client.get("/api/inventory/products", headers=auth).json()[0]  # a listagem não muda
+    assert client.get("/api/inventory/lots", headers=other_auth).json() == []
+
+
+def test_product_with_invalid_lot_is_not_created(client, auth, monkeypatch):
+    from apps.inventory.models import LotMovement, Product
+
+    expires = (timezone.localdate() + timedelta(days=200)).isoformat()
+    body = {"brand": "Allergan", "name": "Botox 100U", "kind": "toxina", "unit": "U"}
+    for bad in [
+        {"number": "P1", "expires_on": expires, "quantity": 0},
+        {"number": "", "expires_on": expires, "quantity": 5},
+        {"number": "P1", "quantity": 5},
+        {"number": "P1", "expires_on": "31/12/2099", "quantity": 5},
+    ]:
+        assert client.post("/api/inventory/products", json=body | {"lot": bad}, headers=auth).status_code == 422, bad
+
+    # falha depois de o produto já ter sido inserido: a transação desfaz o produto e o lote
+    def fail(**kwargs):
+        raise RuntimeError("falha simulada")
+
+    monkeypatch.setattr(LotMovement.objects, "create", fail)
+    with pytest.raises(RuntimeError):
+        client.post("/api/inventory/products", json=body | {"lot": {"number": "P1", "expires_on": expires, "quantity": 5}}, headers=auth)
+    assert not Product.objects.exists()
+    assert client.get("/api/inventory/lots", headers=auth).json() == []
+
+
+def test_product_without_lot_still_works(client, auth):
+    prod = product(client, auth)
+    assert prod["lot"] is None and prod["active"] is True
+    assert client.get("/api/inventory/lots", headers=auth).json() == []
+
+
+def test_lot_number_of_only_spaces_is_refused(client, auth):
+    expires = (timezone.localdate() + timedelta(days=200)).isoformat()
+    blank = {"number": "   ", "expires_on": expires, "quantity": 5}
+    body = {"brand": "Allergan", "name": "Botox 100U", "kind": "toxina", "unit": "U"}
+    assert client.post("/api/inventory/products", json=body | {"lot": blank}, headers=auth).status_code == 422
+    assert client.get("/api/inventory/products", headers=auth).json() == []
+
+    prod = product(client, auth)
+    assert client.post("/api/inventory/lots", json=blank | {"product_id": prod["id"]}, headers=auth).status_code == 422
+    first = lot(client, auth, prod["id"], number="  L7  ").json()
+    assert first["number"] == "L7"
+    assert client.patch(f"/api/inventory/lots/{first['id']}", json={"number": "   "}, headers=auth).status_code == 422
+    assert client.get("/api/inventory/lots", headers=auth).json()[0]["number"] == "L7"
+
+
 def test_alerts_expired_and_expiring(client, auth):
     prod = product(client, auth)
     ok = lot(client, auth, prod["id"], "OK", days=90).json()

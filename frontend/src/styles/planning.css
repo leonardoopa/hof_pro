@@ -372,6 +372,21 @@
   display: grid;
   gap: var(--space-1);
 }
+.region-add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+.region-add label {
+  display: grid;
+  gap: var(--space-1);
+  flex: 1;
+  min-width: 160px;
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
 .region-row {
   display: flex;
   justify-content: space-between;

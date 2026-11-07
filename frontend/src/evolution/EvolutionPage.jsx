@@ -9,6 +9,7 @@ import { detectFace } from '../planning/faceLandmarks'
 import { eyeCenters } from './alignment'
 import '../styles/evolution.css'
 import CompareCanvas, { placeAfter } from './CompareCanvas'
+import LabelPhotos, { LABEL_CAMERA, LABEL_KIND } from './LabelPhotos'
 
 const KINDS = [
   { value: 'frontal', label: 'Frontal' },
@@ -17,6 +18,8 @@ const KINDS = [
   { value: 'outra', label: 'Outra' },
 ]
 const kindLabel = (kind) => KINDS.find((k) => k.value === kind)?.label ?? kind
+// A etiqueta do produto não é foto do rosto: fica no próprio card e fora da comparação.
+const isFace = (p) => p.kind !== LABEL_KIND
 
 const photoLabel = (p) =>
   `${kindLabel(p.kind)} · ${new Date(p.created_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}`
@@ -74,10 +77,16 @@ export default function EvolutionPage() {
   const [align, setAlign] = useState(true)
   const [split, setSplit] = useState(50)
   const [uploadKind, setUploadKind] = useState('frontal')
-  const [camera, setCamera] = useState(false)
+  const [camera, setCamera] = useState(null) // tipo da foto que a câmera aberta vai enviar
   const [busy, setBusy] = useState(false)
   const [toast, toastNode] = useToast()
   const fileInput = useRef(null)
+  const fileKind = useRef(null) // tipo escolhido pelo botão que abriu o seletor de arquivo
+
+  function pickFile(kind) {
+    fileKind.current = kind
+    fileInput.current.click()
+  }
 
   function pickDefaults(list) {
     // A API devolve da mais nova para a mais antiga: "depois" = mais nova, "antes" = mais antiga do mesmo tipo.
@@ -96,7 +105,7 @@ export default function EvolutionPage() {
       .then((list) => {
         if (!alive) return
         setPhotos(list)
-        pickDefaults(list)
+        pickDefaults(list.filter(isFace))
       })
       .catch((err) => alive && setError(err))
     return () => {
@@ -104,15 +113,19 @@ export default function EvolutionPage() {
     }
   }, [patient.id, patient.anonymized_at])
 
-  async function upload(file) {
+  async function upload(file, kind) {
     setBusy(true)
     setError(null)
     try {
-      const meta = await api.photos.upload(patient.id, file, uploadKind)
+      const meta = await api.photos.upload(patient.id, file, kind)
       setPhotos((list) => [meta, ...(list ?? [])])
-      setBeforeId((id) => id ?? afterId) // até aqui só havia uma foto: ela vira o "antes"
-      setAfterId(meta.id) // a foto nova entra como "depois"
-      toast('Foto adicionada.')
+      if (kind === LABEL_KIND) {
+        toast('Etiqueta adicionada.')
+      } else {
+        setBeforeId((id) => id ?? afterId) // até aqui só havia uma foto: ela vira o "antes"
+        setAfterId(meta.id) // a foto nova entra como "depois"
+        toast('Foto adicionada.')
+      }
     } catch (err) {
       setError(err)
     } finally {
@@ -120,6 +133,8 @@ export default function EvolutionPage() {
     }
   }
 
+  const facePhotos = photos?.filter(isFace) ?? []
+  const labelPhotos = photos?.filter((p) => !isFace(p)) ?? []
   const before = usePhotoData(beforeId)
   const after = usePhotoData(afterId)
   const ready = before.status === 'ready' && after.status === 'ready'
@@ -140,17 +155,6 @@ export default function EvolutionPage() {
 
   const fileAndCamera = (
     <>
-      <input
-        ref={fileInput}
-        type="file"
-        accept="image/jpeg,image/png,image/webp"
-        hidden
-        onChange={(e) => {
-          const file = e.target.files?.[0]
-          e.target.value = ''
-          if (file) upload(file)
-        }}
-      />
       <label className="evo-kind">
         <span>Tipo da nova foto</span>
         <select className="input mini" value={uploadKind} onChange={(e) => setUploadKind(e.target.value)}>
@@ -161,10 +165,10 @@ export default function EvolutionPage() {
           ))}
         </select>
       </label>
-      <button className="btn" onClick={() => fileInput.current.click()} disabled={busy}>
+      <button className="btn" onClick={() => pickFile(uploadKind)} disabled={busy}>
         <Upload size={16} /> Enviar foto
       </button>
-      <button className="btn" onClick={() => setCamera(true)} disabled={busy}>
+      <button className="btn" onClick={() => setCamera(uploadKind)} disabled={busy}>
         <Camera size={16} /> Tirar foto
       </button>
     </>
@@ -185,13 +189,25 @@ export default function EvolutionPage() {
   return (
     <div className="evolution">
       <ErrorList error={error} />
+      {/* Um só seletor de arquivo para as fotos do rosto e as etiquetas: o botão que o abre define o tipo. */}
+      <input
+        ref={fileInput}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        hidden
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          e.target.value = ''
+          if (file) upload(file, fileKind.current ?? uploadKind)
+        }}
+      />
 
-      {photos.length < 2 ? (
+      {facePhotos.length < 2 ? (
         <div className="empty-state">
           <ImagePlus size={28} />
           <h2>Comparação antes e depois</h2>
           <p>
-            {photos.length === 0 ? 'Este paciente ainda não tem fotos.' : 'Este paciente tem apenas uma foto.'} Envie ou
+            {facePhotos.length === 0 ? 'Este paciente ainda não tem fotos.' : 'Este paciente tem apenas uma foto.'} Envie ou
             tire pelo menos duas fotos (com a mesma pose) para compará-las alinhadas pelo rosto.
           </p>
           <div className="photo-actions">{fileAndCamera}</div>
@@ -207,7 +223,7 @@ export default function EvolutionPage() {
                 <label key={label} className="field">
                   <span>{label}</span>
                   <select className="input" value={value ?? ''} onChange={(e) => set(Number(e.target.value))}>
-                    {photos.map((p) => (
+                    {facePhotos.map((p) => (
                       <option key={p.id} value={p.id}>
                         {photoLabel(p)}
                       </option>
@@ -267,12 +283,20 @@ export default function EvolutionPage() {
         </>
       )}
 
+      <LabelPhotos
+        photos={labelPhotos}
+        busy={busy}
+        onUpload={() => pickFile(LABEL_KIND)}
+        onCamera={() => setCamera(LABEL_KIND)}
+      />
+
       {camera && (
         <CameraCapture
-          onClose={() => setCamera(false)}
+          {...(camera === LABEL_KIND ? LABEL_CAMERA : {})}
+          onClose={() => setCamera(null)}
           onCapture={(file) => {
-            setCamera(false)
-            upload(file)
+            setCamera(null)
+            upload(file, camera)
           }}
         />
       )}

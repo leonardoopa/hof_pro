@@ -70,6 +70,71 @@
   text-align: center;
   color: var(--muted);
 }
+/* Etiquetas dos produtos: miniaturas clicáveis e a foto ampliada, grande o bastante para ler lote e validade. */
+.evo-labels .card-title {
+  margin-bottom: 0;
+}
+.evo-labels-note {
+  margin-bottom: var(--space-3);
+}
+.evo-label-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--space-3);
+}
+.evo-label {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: 0 0 var(--space-2);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  text-align: left;
+  cursor: zoom-in;
+}
+.evo-label:hover:not(:disabled) {
+  border-color: var(--line-strong);
+}
+.evo-label:disabled {
+  cursor: default;
+}
+/* Caixa fixa 4:3: a foto fica presa nela (etiqueta em pé não estica o card) e aparece inteira. */
+.evo-label-img {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  background: var(--stage-bg);
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+.evo-label-img img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.evo-label-date {
+  padding: 0 var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+.modal.evo-label-modal {
+  width: min(960px, 100%);
+}
+.evo-label-full {
+  display: block;
+  width: 100%;
+  max-height: 65vh;
+  margin-bottom: var(--space-3);
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  background: var(--stage-bg);
+}
 @media (max-width: 560px) {
   .evo-pickers {
     grid-template-columns: 1fr;

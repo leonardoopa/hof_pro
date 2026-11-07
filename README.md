@@ -66,25 +66,27 @@ Testes:
 
 - **Login e cadastro** por e-mail e senha (JWT, 12 h). Cada profissional só enxerga os próprios pacientes.
 - **Pacientes**: lista com busca, cadastro, arquivamento e ocultação de dados. Nada é apagado.
-- **Anamnese**: 15 perguntas sim/não semeadas por migration (editáveis no admin Django). "Sim" exige descrição. Cada alteração salva vira uma versão que não muda mais, com autor, data e a pergunta como foi feita; a tela mostra o histórico e o que mudou em cada versão. Anamnese salva antes deste recurso começa na versão 1, com o estado em que estava: o que já tinha sido sobrescrito não volta.
+- **Anamnese**: 15 perguntas sim/não semeadas por migration (editáveis no admin Django). "Sim" exige descrição. Cada alteração salva vira uma versão que não muda mais, com autor, data e a pergunta como foi feita; a tela mostra o histórico e o que mudou em cada versão. Anamnese salva antes deste recurso começa na versão 1, com o estado em que estava: o que já tinha sido sobrescrito não volta. Pergunta desativada sai do formulário, e a resposta já dada segue guardada e visível no histórico.
 - **Planejamento facial**:
-  - foto frontal pela câmera ou por upload;
-  - o MediaPipe detecta o rosto no navegador e posiciona os pontos sugeridos em 19 regiões:
+  - **base do plano**: foto frontal do paciente (câmera ou upload) ou **rosto simétrico de referência** (desenho de linhas, sem foto; o plano é salvo sem foto e os pontos valem para o desenho). Trocar de uma base para outra apaga os pontos colocados, porque as posições são da imagem. No rosto de referência não há simulação nem painel de simetria;
+  - **o plano começa vazio**: a lista de regiões só mostra as regiões em que já há pontos, e uma região entra na lista quando o primeiro ponto é colocado nela (escolha a região em "Adicionar região", toque em "Adicionar ponto" e marque na imagem). O botão "Sugerir pontos" (só com o plano vazio) coloca os pontos sugeridos de uma vez: o MediaPipe detecta o rosto no navegador e posiciona os pontos, ou usa a posição padrão no rosto de referência. As 19 regiões são:
     - terço superior: testa, glabela, têmporas, periorbital (pés de galinha);
     - terço médio: olheiras, nariz (inclui bunny lines), zigomático, malar, submalar, nasolabial, sorriso gengival (LLSAN);
     - terço inferior: boca, marionete, DAO, mento (inclui mentual), pré-jowl, mandíbula, masseter;
     - pescoço: platisma;
   - cada ponto sugerido tem nome anatômico (ex.: prócero, corrugador medial, arco do cupido), salvo no plano; a região mostra um alerta de risco quando o estudo em `docs/IMPLEMENTACAO-FOTO-PONTOS-ANTES-DEPOIS.md` tem fonte para ele. Doses de referência não aparecem até serem validadas por profissional;
-  - planos salvos antes dos nomes de ponto ganham as regiões que faltam (quantidade 0) ao abrir; nos demais, região vazia é escolha do profissional e continua vazia;
+  - planos já salvos abrem como foram salvos, sem regiões acrescentadas;
   - tocar numa região dá zoom e mostra os pontos; cada ponto tem produto e quantidade, pode ser arrastado, removido ou adicionado;
   - resumo ao vivo: total de ml (preenchimentos), unidades (toxina) e número de áreas;
   - **Simular resultado**: comparação antes/depois ilustrativa, com divisor (suavização para toxina, volume local para preenchedores, clareamento do vinco nos sulcos).
-- **Região boca** (lábios) e **técnica / profundidade / lote** por ponto no mapa facial.
-- **Estoque**: produtos (marca, unidade, registro Anvisa) e lotes com validade e saldo; alerta de vencimento (30 dias); "Marcar como aplicado" dá baixa atômica nos lotes (bloqueia lote vencido, unidade incompatível e saldo insuficiente) e grava o **cartão de rastreabilidade** imprimível por paciente, com região e nome do ponto.
+- **Região boca** (lábios) e **técnica / profundidade / lote** por ponto no mapa facial. O lote sai do estoque ou é cadastrado ali mesmo em "Novo lote" (com produto novo, se preciso), já entrando no estoque.
+- **Estoque**: produtos (marca, unidade, registro Anvisa), cadastrados já com o primeiro lote, e lotes com validade e saldo; alerta de vencimento (30 dias); "Marcar como aplicado" dá baixa atômica nos lotes (bloqueia lote vencido, unidade incompatível e saldo insuficiente) e grava o **cartão de rastreabilidade** imprimível por paciente, com região e nome do ponto.
 - **Prontuário / Termos**: termos versionados, assinatura desenhada no canvas (PNG), hash SHA-256 do conteúdo, data/hora e IP; autorização de uso de imagem separada e revogável; documento imprimível.
-- **Evolução**: comparação antes/depois de fotos do paciente, com alinhamento pelos olhos.
+- **Evolução**: comparação antes/depois de fotos do paciente, com alinhamento pelos olhos. Abaixo, fotos das etiquetas dos produtos (arquivo ou câmera traseira), fora da comparação e ampliáveis para ler lote e validade.
 - **Resumo e Orientações**: orientações pós-procedimento por tratamento, geradas a partir do plano, imprimíveis.
 - **Design system** (`styles/tokens.css`) com tema claro/escuro e alternador.
+- **Relatório mensal** (`GET /api/reports/monthly?month=AAAA-MM`): pacientes atendidos no mês (com novos cadastros e nº de aplicações), produtos e lotes usados (total em U/ml, validade e saldo atual), exportação CSV. Pacientes com dados ocultos ficam de fora.
+- **Agenda** (app `scheduling`, `/api/appointments`): visão semanal, agendamento de paciente cadastrado ou de novo paciente (nome/telefone), status (agendado, confirmado, realizado, cancelado, faltou), conflito de horário (409) e conversão do lead em paciente. Auditado.
 - Financeiro aparece como "Em breve".
 
 ## Decisões e limites
@@ -99,7 +101,17 @@ Testes:
 - O MediaPipe roda localmente: a foto não vai para nenhum serviço. Só o runtime WASM (jsDelivr) e o modelo (Google Storage) são baixados; para produção ou uso offline, hospede os dois (`frontend/src/planning/faceLandmarks.js`).
 - Sem refresh token ainda. O limite de tentativas de login fica em memória: com vários processos, precisa de armazenamento compartilhado.
 
+## Decisões da agenda e do relatório mensal
+
+- Agendamento nunca é apagado: cancelar muda o status, e agendamento cancelado não ocupa o horário (reativar exige o horário livre). O conflito é por profissional. Criar, editar e mudar status travam o profissional (`select_for_update`) dentro da transação antes de checar o conflito, para dois pedidos simultâneos não duplicarem o horário no SQL Server. O SQLite ignora o bloqueio, e não há teste de concorrência real.
+- Novo paciente é um "lead" (nome e telefone no próprio agendamento); "Cadastrar como paciente" cria o cadastro e vincula. Não há checagem de duplicidade com pacientes existentes.
+- Agenda semanal de 07h às 20h (a grade se estende sozinha se houver agendamento fora da faixa; cancelados ficam ocultos até marcar "Mostrar cancelados"), sem recorrência, sem lembretes e sem integração com calendário externo.
+- O relatório mensal reaproveita a consulta de `/reports/usage`; o consumo de produto inclui aplicações de pacientes com dados ocultos (estoque não expõe dado pessoal), mas a lista de pacientes não (a tela avisa).
+- Todo CSV exportado neutraliza texto que começa com `=`, `+`, `-` ou `@` (apóstrofo na frente), para o Excel não executar como fórmula.
+- Retenção: a clínica precisa guardar os dados e os relatórios das pessoas por 5 anos, então o nome e o telefone do lead permanecem no agendamento (cancelar só muda o status) e nada é apagado automaticamente. Listar agendamentos não grava log de acesso (criar e editar gravam); decisão consciente, a rever se a rastreabilidade de leitura for exigida.
+
 ## Próximos passos
 
-1. Financeiro (orçamentos e recebimentos) e histórico por paciente.
-2. Simulação por IA a partir do planejamento.
+1. Agenda: lembretes por WhatsApp/e-mail, recorrência, bloqueio de horários e visão diária no celular.
+2. Financeiro (orçamentos e recebimentos) e histórico por paciente.
+3. Simulação por IA a partir do planejamento.

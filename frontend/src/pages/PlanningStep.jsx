@@ -1,4 +1,4 @@
-import { AlertTriangle, Camera, CheckCheck, ChevronLeft, Crosshair, Eye, EyeOff, Minus, Plus, Save, ScanFace, Sparkles, Trash2, Upload } from 'lucide-react'
+import { AlertTriangle, Camera, CheckCheck, ChevronLeft, Crosshair, Eye, EyeOff, Minus, PackagePlus, Plus, Save, ScanFace, Smile, Sparkles, Trash2, Upload, Wand2 } from 'lucide-react'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useOutletContext } from 'react-router-dom'
 import { api } from '../api/client'
@@ -8,6 +8,8 @@ import { useToast } from '../components/Toast'
 import CameraCapture from '../planning/CameraCapture'
 import { detectFace } from '../planning/faceLandmarks'
 import FaceStage from '../planning/FaceStage'
+import { MODEL_FACE } from '../planning/modelFace'
+import NewLotModal from '../planning/NewLotModal'
 import {
   BILATERAL,
   GROUPS,
@@ -46,9 +48,9 @@ function loadImage(url) {
 
 const DETECT_NOTE = {
   running: 'Detectando o rosto…',
-  found: 'Pontos ajustados ao rosto. Arraste para refinar.',
-  fallback: 'Rosto não detectado: pontos na posição padrão. Arraste para ajustar.',
-  error: 'Detecção indisponível (sem conexão?): pontos na posição padrão. Arraste para ajustar.',
+  found: 'Pontos sugeridos ajustados ao rosto. Arraste para refinar.',
+  fallback: 'Rosto não detectado: pontos sugeridos na posição padrão. Arraste para ajustar.',
+  error: 'Detecção indisponível (sem conexão?): pontos sugeridos na posição padrão. Arraste para ajustar.',
 }
 
 const clampAmount = (n) => clamp(round2(n), 0, 200)
@@ -92,6 +94,8 @@ export default function PlanningStep() {
 
   const [photo, setPhoto] = useState(null)
   const [image, setImage] = useState(null)
+  // Planejar sobre o rosto simétrico de referência (sem foto): o plano é salvo sem photo_id.
+  const modelMode = image?.isModel === true
   const [detect, setDetect] = useState('idle')
   const [plan, setPlan] = useState(null)
   const [points, setPoints] = useState([])
@@ -102,6 +106,7 @@ export default function PlanningStep() {
   const [confirm, setConfirm] = useState(null) // { title, message, confirmLabel, onConfirm }
   const [suggested, setSuggested] = useState([]) // regiões destacadas pelo painel de simetria
   const [lots, setLots] = useState([]) // lotes disponíveis (saldo > 0 e válidos) do estoque
+  const [lotFor, setLotFor] = useState(null) // ponto que recebe um lote novo, criado no modal
 
   const [treatment, setTreatment] = useState('preenchimento')
   const [zone, setZone] = useState(null) // { region, side } em zoom
@@ -119,7 +124,7 @@ export default function PlanningStep() {
   const fileInput = useRef(null)
   const blobUrl = useRef(null)
   const totals = useMemo(() => totalsOf(points), [points])
-  const compare = simChoice ?? points.some((p) => p.amount > 0)
+  const compare = !modelMode && (simChoice ?? points.some((p) => p.amount > 0)) // simular só faz sentido sobre uma foto
 
   // ---- carregar foto + pontos ----
   // Detecção feita uma única vez por imagem; o posicionamento dos pontos e o painel de simetria compartilham o resultado.
@@ -150,27 +155,6 @@ export default function PlanningStep() {
     setPoints(template.map((t) => withUid({ ...t, treatment: 'preenchimento', amount: 0 })))
   }, [getLandmarks])
 
-  // Planos salvos antes de uma região existir: acrescenta os pontos do modelo dessa região (quantidade 0),
-  // posicionados pelo rosto da foto. Não conta como alteração do plano.
-  const fillMissingRegions = useCallback(async (img, loaded, token) => {
-    const missing = new Set(REGIONS.map((r) => r.key).filter((key) => !loaded.some((p) => p.region === key)))
-    if (!missing.size) return
-    let template
-    try {
-      const landmarks = await getLandmarks(img)
-      template = landmarks ? buildTemplate(landmarks, img.naturalWidth, img.naturalHeight) : fallbackTemplate()
-    } catch {
-      template = fallbackTemplate()
-    }
-    if (token !== placeToken.current) return
-    setPoints((ps) => [
-      ...ps,
-      ...template
-        .filter((t) => missing.has(t.region) && !ps.some((p) => p.region === t.region))
-        .map((t) => withUid({ ...t, treatment: 'preenchimento', amount: 0 })),
-    ])
-  }, [getLandmarks])
-
   const showPhoto = useCallback(
     async (meta, savedPoints) => {
       const url = await api.photos.objectUrl(meta.id)
@@ -180,7 +164,7 @@ export default function PlanningStep() {
       setPhoto(meta)
       setImage(img)
       if (savedPoints?.length) {
-        const token = ++placeToken.current
+        placeToken.current += 1
         const loaded = assignSides(
           savedPoints.map((p) =>
             withUid({
@@ -198,15 +182,41 @@ export default function PlanningStep() {
         )
         setPoints(loaded)
         setDetect('idle')
-        // Só plano salvo antes dos nomes de ponto (point_key) tem região faltando por ser antigo. Com nomes, ele nasceu
-        // com o catálogo inteiro e região vazia é escolha do profissional.
-        if (!loaded.some((p) => p.point_key)) fillMissingRegions(img, loaded, token)
       } else {
-        placeAutomatically(img) // em segundo plano: a foto já aparece enquanto o modelo carrega
+        placeToken.current += 1 // descarta uma sugestão automática ainda em andamento
+        setPoints([]) // foto nova: os pontos são colocados pelo profissional, região por região
+        setDetect('idle')
       }
     },
-    [placeAutomatically, fillMissingRegions],
+    [],
   )
+
+  // Rosto simétrico de referência no lugar da foto. Com pontos salvos, eles vêm junto.
+  const showModel = useCallback((savedPoints) => {
+    if (blobUrl.current) URL.revokeObjectURL(blobUrl.current)
+    blobUrl.current = null
+    placeToken.current += 1
+    setPhoto(null)
+    setImage(MODEL_FACE)
+    setDetect('idle')
+    setPoints(
+      assignSides(
+        (savedPoints ?? []).map((p) =>
+          withUid({
+            region: p.region,
+            point_key: p.point_key ?? '',
+            treatment: p.treatment,
+            x: p.x,
+            y: p.y,
+            amount: p.amount,
+            technique: p.technique,
+            depth: p.depth,
+            lot_id: p.lot_id,
+          }),
+        ),
+      ),
+    )
+  }, [])
 
   useEffect(() => {
     // Com os dados ocultos não carrega nada. Ao mostrar de novo, se a foto já estava aberta, o rascunho continua como estava.
@@ -227,7 +237,9 @@ export default function PlanningStep() {
         setPlan(saved)
         setNotes(saved?.notes ?? '')
         const meta = photos.find((p) => p.id === saved?.photo_id) ?? photos.find((p) => p.kind === 'frontal') ?? null
-        if (meta) await showPhoto(meta, saved?.points)
+        // Plano salvo sem foto e com pontos: foi feito sobre o rosto simétrico de referência.
+        if (saved && !saved.photo_id && saved.points?.length) showModel(saved.points)
+        else if (meta) await showPhoto(meta, saved?.points)
       } catch (err) {
         if (alive) setError(err)
       } finally {
@@ -237,7 +249,7 @@ export default function PlanningStep() {
     return () => {
       alive = false
     }
-  }, [patient.id, patient.anonymized_at, showPhoto])
+  }, [patient.id, patient.anonymized_at, showPhoto, showModel])
 
   useEffect(() => () => {
     if (blobUrl.current) URL.revokeObjectURL(blobUrl.current)
@@ -353,10 +365,10 @@ export default function PlanningStep() {
   // ---- foto ----
   function addPhoto(file) {
     if (!file) return
-    if (points.some((p) => p.amount > 0)) {
+    if (points.length) {
       setConfirm({
         title: 'Trocar a foto',
-        message: 'Trocar a foto recria os pontos e zera as quantidades. Continuar?',
+        message: 'Trocar a foto apaga os pontos colocados, porque as posições são da imagem atual. Continuar?',
         confirmLabel: 'Trocar foto',
         onConfirm: () => uploadPhoto(file),
       })
@@ -381,6 +393,41 @@ export default function PlanningStep() {
     } finally {
       setBusy(false)
     }
+  }
+
+  // ---- rosto simétrico de referência e sugestão de pontos ----
+  function chooseModelFace() {
+    if (points.length) {
+      setConfirm({
+        title: 'Usar o rosto simétrico',
+        message: 'Trocar para o rosto simétrico apaga os pontos colocados, porque as posições são da imagem atual. Continuar?',
+        confirmLabel: 'Usar rosto simétrico',
+        onConfirm: applyModelFace,
+      })
+      return
+    }
+    applyModelFace()
+  }
+
+  function applyModelFace() {
+    showModel(null)
+    closeRegion()
+    setShowMarks(true)
+    setCamera(false)
+    setDirty(true)
+  }
+
+  // Opcional: o profissional pode pedir os pontos sugeridos (posicionados pelo rosto da foto, ou na posição padrão do
+  // rosto de referência). Por padrão o plano começa vazio e as regiões aparecem conforme os pontos são colocados.
+  async function suggestPoints() {
+    setShowMarks(true)
+    if (modelMode) {
+      setPoints(fallbackTemplate().map((t) => withUid({ ...t, treatment: 'preenchimento', amount: 0 })))
+      setDetect('idle')
+    } else {
+      await placeAutomatically(image)
+    }
+    setDirty(true)
   }
 
   // ---- salvar ----
@@ -466,6 +513,7 @@ export default function PlanningStep() {
     const list = lots.filter((l) => l.unit === unit)
     return p.lot_id && !list.some((l) => l.id === p.lot_id) ? [...list, { id: p.lot_id, stale: true }] : list
   }
+  const regionsWithPoints = [...new Set(points.map((p) => p.region))]
   const zonePoints = zone ? points.filter((p) => p.region === zone.region && p.side === zone.side) : []
   const filePicker = (
     <input
@@ -485,7 +533,7 @@ export default function PlanningStep() {
       <section className="card stage-card">
         <div className="card-title">
           <ScanFace size={18} /> Planejamento facial
-          <span className="sub">Toque numa região para ampliar e definir a quantidade em cada ponto.</span>
+          <span className="sub">Escolha uma região, marque os pontos na imagem e defina a quantidade em cada um.</span>
         </div>
 
         {!anamnesisDone && (
@@ -513,14 +561,20 @@ export default function PlanningStep() {
         {!image ? (
           <div className="photo-empty">
             <ScanFace size={34} />
-            <h2>Foto frontal do paciente</h2>
-            <p>Tire uma foto agora ou envie uma já existente. Rosto de frente, boa luz, cabelo afastado da testa.</p>
+            <h2>Foto do paciente ou rosto simétrico</h2>
+            <p>
+              Tire ou envie a foto do paciente (rosto de frente, boa luz, cabelo afastado da testa), ou planeje sobre um rosto
+              simétrico de referência, sem foto.
+            </p>
             <div className="photo-actions">
               <button className="btn primary" onClick={() => setCamera(true)} disabled={busy}>
                 <Camera size={17} /> Tirar foto
               </button>
               <button className="btn" onClick={() => fileInput.current.click()} disabled={busy}>
                 <Upload size={17} /> Enviar foto
+              </button>
+              <button className="btn" onClick={chooseModelFace} disabled={busy}>
+                <Smile size={17} /> Rosto simétrico
               </button>
             </div>
           </div>
@@ -556,6 +610,7 @@ export default function PlanningStep() {
 
             <FaceStage
               imageUrl={image.src}
+              alt={modelMode ? 'Rosto simétrico de referência' : 'Foto frontal do paciente'}
               aspect={image.naturalWidth / image.naturalHeight}
               points={points}
               zone={zone}
@@ -575,9 +630,11 @@ export default function PlanningStep() {
             />
 
             <div className="stage-foot">
-              <button className={`btn small ${compare ? 'primary' : ''}`} onClick={() => setSimChoice(!compare)} aria-pressed={compare}>
-                <Sparkles size={15} /> Simular resultado
-              </button>
+              {!modelMode && (
+                <button className={`btn small ${compare ? 'primary' : ''}`} onClick={() => setSimChoice(!compare)} aria-pressed={compare}>
+                  <Sparkles size={15} /> Simular resultado
+                </button>
+              )}
               <button className={`btn small ${showMarks ? '' : 'primary'}`} onClick={toggleMarks} aria-pressed={!showMarks}>
                 {showMarks ? <EyeOff size={15} /> : <Eye size={15} />} {showMarks ? 'Ocultar pontos' : 'Mostrar pontos'}
               </button>
@@ -596,13 +653,19 @@ export default function PlanningStep() {
                 </label>
               )}
               <span className="spacer" />
+              {!modelMode && (
+                <button className="btn ghost small" onClick={chooseModelFace} disabled={busy || applied}>
+                  <Smile size={15} /> Rosto simétrico
+                </button>
+              )}
               <button className="btn ghost small" onClick={() => setCamera(true)} disabled={busy || applied}>
-                <Camera size={15} /> Nova foto
+                <Camera size={15} /> {modelMode ? 'Usar foto do paciente' : 'Nova foto'}
               </button>
               <button className="btn ghost small" onClick={() => fileInput.current.click()} disabled={busy || applied}>
-                <Upload size={15} /> Trocar foto
+                <Upload size={15} /> {modelMode ? 'Enviar foto' : 'Trocar foto'}
               </button>
             </div>
+            {modelMode && <p className="note">Rosto simétrico de referência: o plano não usa foto. Os pontos valem para este desenho.</p>}
             <p className="note">{DETECT_NOTE[detect]}</p>
             {compare && (
               <p className="note">
@@ -631,7 +694,7 @@ export default function PlanningStep() {
               <dd>{totals.areas}</dd>
             </div>
           </dl>
-          <button className="btn primary wide" onClick={save} disabled={busy || !photo || applied}>
+          <button className="btn primary wide" onClick={save} disabled={busy || (!photo && !modelMode) || applied}>
             <Save size={16} /> {busy ? 'Salvando…' : 'Salvar plano'}
           </button>
           {plan && !applied && (
@@ -659,29 +722,65 @@ export default function PlanningStep() {
             {!zone ? (
               <>
                 <div className="card-title">Regiões</div>
+                {!regionsWithPoints.length && (
+                  <p className="note">Nenhuma região ainda. Escolha uma região abaixo para começar a colocar os pontos.</p>
+                )}
                 <div className="region-list">
-                  {GROUPS.map((group) => (
-                    <Fragment key={group.key}>
-                      <span className="region-group">{group.label}</span>
-                      {REGIONS.filter((r) => r.group === group.key).map(({ key, label }) => {
-                        const total = totalsOf(points.filter((p) => p.region === key))
-                        return (
-                          <button
-                            key={key}
-                            type="button"
-                            className={`region-row ${hoverRegion === key ? 'hover' : ''} ${suggested.includes(key) ? 'suggest' : ''}`}
-                            onClick={() => openRegion(key)}
-                            onMouseEnter={() => setHoverRegion(key)}
-                            onMouseLeave={() => setHoverRegion(null)}
-                          >
-                            <span>{label}</span>
-                            <b className={total.areas ? '' : 'muted'}>{describeTotals(total)}</b>
-                          </button>
-                        )
-                      })}
-                    </Fragment>
-                  ))}
+                  {GROUPS.map((group) => {
+                    const inGroup = REGIONS.filter((r) => r.group === group.key && regionsWithPoints.includes(r.key))
+                    if (!inGroup.length) return null
+                    return (
+                      <Fragment key={group.key}>
+                        <span className="region-group">{group.label}</span>
+                        {inGroup.map(({ key, label }) => {
+                          const total = totalsOf(points.filter((p) => p.region === key))
+                          return (
+                            <button
+                              key={key}
+                              type="button"
+                              className={`region-row ${hoverRegion === key ? 'hover' : ''} ${suggested.includes(key) ? 'suggest' : ''}`}
+                              onClick={() => openRegion(key)}
+                              onMouseEnter={() => setHoverRegion(key)}
+                              onMouseLeave={() => setHoverRegion(null)}
+                            >
+                              <span>{label}</span>
+                              <b className={total.areas ? '' : 'muted'}>{describeTotals(total)}</b>
+                            </button>
+                          )
+                        })}
+                      </Fragment>
+                    )
+                  })}
                 </div>
+                {!applied && (
+                  <div className="region-add">
+                    <label>
+                      <span>Adicionar região</span>
+                      <select
+                        className="input mini"
+                        value=""
+                        onChange={(e) => e.target.value && openRegion(e.target.value)}
+                        aria-label="Adicionar região"
+                      >
+                        <option value="">Escolher região…</option>
+                        {GROUPS.map((group) => (
+                          <optgroup key={group.key} label={group.label}>
+                            {REGIONS.filter((r) => r.group === group.key && !regionsWithPoints.includes(r.key)).map((r) => (
+                              <option key={r.key} value={r.key}>
+                                {r.label}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </select>
+                    </label>
+                    {!points.length && (
+                      <button type="button" className="btn small" onClick={suggestPoints} disabled={busy}>
+                        <Wand2 size={15} /> Sugerir pontos
+                      </button>
+                    )}
+                  </div>
+                )}
               </>
             ) : (
               <>
@@ -771,21 +870,28 @@ export default function PlanningStep() {
                               ))}
                             </select>
                           </label>
-                          <label className="lot">
-                            <span>Lote (opcional)</span>
-                            <select
-                              className="input mini"
-                              value={p.lot_id ?? ''}
-                              onChange={(e) => patchPoint(p.uid, { lot_id: e.target.value ? Number(e.target.value) : null })}
-                            >
-                              <option value="">Sem lote</option>
-                              {lotOptions(p).map((l) => (
-                                <option key={l.id} value={l.id}>
-                                  {l.stale ? `Lote #${l.id} (indisponível)` : lotLabel(l)}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
+                          <div className="lot">
+                            <label>
+                              <span>Lote (opcional)</span>
+                              <select
+                                className="input mini"
+                                value={p.lot_id ?? ''}
+                                onChange={(e) => patchPoint(p.uid, { lot_id: e.target.value ? Number(e.target.value) : null })}
+                              >
+                                <option value="">Sem lote</option>
+                                {lotOptions(p).map((l) => (
+                                  <option key={l.id} value={l.id}>
+                                    {l.stale ? `Lote #${l.id} (indisponível)` : lotLabel(l)}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            {!applied && (
+                              <button type="button" className="btn small" onClick={() => setLotFor({ uid: p.uid, treatment: p.treatment })}>
+                                <PackagePlus size={15} /> Novo lote
+                              </button>
+                            )}
+                          </div>
                         </div>
                       )}
                       </Fragment>
@@ -798,7 +904,7 @@ export default function PlanningStep() {
           </section>
         )}
 
-        {image && <SymmetryPanel image={image} getLandmarks={getLandmarks} suggested={suggested} onSuggest={setSuggested} />}
+        {image && !modelMode && <SymmetryPanel image={image} getLandmarks={getLandmarks} suggested={suggested} onSuggest={setSuggested} />}
 
         <section className="card">
           <div className="card-title">Observações</div>
@@ -817,6 +923,18 @@ export default function PlanningStep() {
 
       {camera && <CameraCapture onCapture={addPhoto} onClose={() => setCamera(false)} />}
       {confirm && <ConfirmModal {...confirm} onClose={() => setConfirm(null)} />}
+      {lotFor && (
+        <NewLotModal
+          treatment={lotFor.treatment}
+          onClose={() => setLotFor(null)}
+          onSaved={(lot) => {
+            // O lote novo já é estoque de verdade; escolhê-lo no ponto é alteração do plano, como qualquer outra.
+            setLots((ls) => [...ls, lot])
+            patchPoint(lotFor.uid, { lot_id: lot.id })
+            setLotFor(null)
+          }}
+        />
+      )}
       {toastNode}
     </div>
   )

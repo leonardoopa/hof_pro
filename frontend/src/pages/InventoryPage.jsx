@@ -2,31 +2,28 @@ import { AlertTriangle, History, Package, Plus, SlidersHorizontal } from 'lucide
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { api } from '../api/client'
 import ErrorList from '../components/ErrorList'
+import LotFields, { KINDS } from '../components/LotFields'
 import Modal from '../components/Modal'
 import { parseAmount } from '../planning/regions'
 import { fmtDate } from '../planning/technique'
 
-const KINDS = [
-  { key: 'toxina', label: 'Toxina', unit: 'U' },
-  { key: 'preenchedor', label: 'Preenchedor', unit: 'ml' },
-  { key: 'bioestimulador', label: 'Bioestimulador', unit: 'ml' },
-  { key: 'skinbooster', label: 'Skinbooster', unit: 'ml' },
-  { key: 'outro', label: 'Outro', unit: 'ml' },
-]
 const kindLabel = (key) => KINDS.find((k) => k.key === key)?.label ?? key
 
 function ProductModal({ onClose, onSaved }) {
   const [form, setForm] = useState({ brand: '', name: '', kind: 'preenchedor', unit: 'ml', anvisa_registration: '' })
+  const [lot, setLot] = useState({ number: '', expires_on: '', quantity: '' })
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
   const set = (field) => (e) => setForm({ ...form, [field]: e.target.value })
+  const setLotField = (field) => (e) => setLot({ ...lot, [field]: e.target.value })
 
   async function submit(e) {
     e.preventDefault()
     setBusy(true)
     setError(null)
     try {
-      onSaved(await api.inventory.createProduct(form))
+      // Produto e primeiro lote vão juntos: o servidor grava os dois ou nenhum.
+      onSaved(await api.inventory.createProduct({ ...form, lot: { ...lot, quantity: parseAmount(lot.quantity) } }))
     } catch (err) {
       setError(err)
       setBusy(false)
@@ -74,6 +71,7 @@ function ProductModal({ onClose, onSaved }) {
           <span>Registro Anvisa</span>
           <input className="input" value={form.anvisa_registration} onChange={set('anvisa_registration')} />
         </label>
+        <LotFields lot={lot} set={setLotField} unit={form.unit} />
         <div className="modal-actions">
           <button type="button" className="btn" onClick={onClose}>
             Cancelar
@@ -167,20 +165,7 @@ function LotModal({ products, onClose, onSaved }) {
             ))}
           </select>
         </label>
-        <div className="form-row">
-          <label className="field">
-            <span>Número do lote</span>
-            <input className="input" value={form.number} onChange={set('number')} required />
-          </label>
-          <label className="field">
-            <span>Validade</span>
-            <input className="input" type="date" value={form.expires_on} onChange={set('expires_on')} required />
-          </label>
-        </div>
-        <label className="field">
-          <span>Quantidade ({unit})</span>
-          <input className="input" inputMode="decimal" pattern="\d+([.,]\d{1,2})?" title="Até duas casas decimais, ex.: 12,5" value={form.quantity} onChange={set('quantity')} required />
-        </label>
+        <LotFields lot={form} set={set} unit={unit} />
         <div className="modal-actions">
           <button type="button" className="btn" onClick={onClose}>
             Cancelar
@@ -308,7 +293,7 @@ export default function InventoryPage() {
         <div className="card empty">
           <Package size={28} />
           <h2>Nenhum produto ainda</h2>
-          <p>Cadastre um produto e depois registre a entrada dos lotes.</p>
+          <p>Cadastre um produto com o primeiro lote. As próximas entradas vão em Entrada de lote.</p>
         </div>
       ) : (
         products.map((product) => {
@@ -334,55 +319,57 @@ export default function InventoryPage() {
                 </button>
               </div>
               {productLots.length ? (
-                <table className="inv-table">
-                  <thead>
-                    <tr>
-                      <th>Lote</th>
-                      <th>Validade</th>
-                      <th>Inicial</th>
-                      <th>Saldo</th>
-                      <th>Situação</th>
-                      <th />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {productLots.map((lot) => {
-                      const st = lotStatus(lot)
-                      return (
-                        <Fragment key={lot.id}>
-                        <tr>
-                          <td>{lot.number}</td>
-                          <td>{fmtDate(lot.expires_on)}</td>
-                          <td>
-                            {lot.initial_quantity} {lot.unit}
-                          </td>
-                          <td>
-                            <b>
-                              {lot.balance} {lot.unit}
-                            </b>
-                          </td>
-                          <td>
-                            <span className={`lot-status ${st.cls}`}>{st.text}</span>
-                          </td>
-                          <td className="inv-actions">
-                            <button
-                              className="icon-btn"
-                              aria-label={`Histórico do lote ${lot.number}`}
-                              onClick={() => setOpenHistory(openHistory === lot.id ? null : lot.id)}
-                            >
-                              <History size={14} />
-                            </button>
-                            <button className="icon-btn" aria-label={`Ajustar saldo do lote ${lot.number}`} onClick={() => setAdjusting(lot)}>
-                              <SlidersHorizontal size={14} />
-                            </button>
-                          </td>
-                        </tr>
-                        {openHistory === lot.id && <MovementsRow lotId={lot.id} />}
-                        </Fragment>
-                      )
-                    })}
-                  </tbody>
-                </table>
+                <div className="inv-table-wrap">
+                  <table className="inv-table">
+                    <thead>
+                      <tr>
+                        <th>Lote</th>
+                        <th>Validade</th>
+                        <th>Inicial</th>
+                        <th>Saldo</th>
+                        <th>Situação</th>
+                        <th />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {productLots.map((lot) => {
+                        const st = lotStatus(lot)
+                        return (
+                          <Fragment key={lot.id}>
+                          <tr>
+                            <td>{lot.number}</td>
+                            <td>{fmtDate(lot.expires_on)}</td>
+                            <td>
+                              {lot.initial_quantity} {lot.unit}
+                            </td>
+                            <td>
+                              <b>
+                                {lot.balance} {lot.unit}
+                              </b>
+                            </td>
+                            <td>
+                              <span className={`lot-status ${st.cls}`}>{st.text}</span>
+                            </td>
+                            <td className="inv-actions">
+                              <button
+                                className="icon-btn"
+                                aria-label={`Histórico do lote ${lot.number}`}
+                                onClick={() => setOpenHistory(openHistory === lot.id ? null : lot.id)}
+                              >
+                                <History size={14} />
+                              </button>
+                              <button className="icon-btn" aria-label={`Ajustar saldo do lote ${lot.number}`} onClick={() => setAdjusting(lot)}>
+                                <SlidersHorizontal size={14} />
+                              </button>
+                            </td>
+                          </tr>
+                          {openHistory === lot.id && <MovementsRow lotId={lot.id} />}
+                          </Fragment>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               ) : (
                 <p className="inv-meta">Sem lotes.</p>
               )}

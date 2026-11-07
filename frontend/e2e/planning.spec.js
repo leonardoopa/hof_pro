@@ -986,6 +986,86 @@ test.describe('marcar como aplicado', () => {
   })
 })
 
+test.describe('lote novo pelo planejamento', () => {
+  const chosenLot = (page) => page.getByLabel('Lote (opcional)').locator('option:checked')
+  const newLotDialog = (page) => page.getByRole('dialog', { name: 'Novo lote' })
+
+  test('toxina sem estoque: produto e lote criados aqui, salvos no plano, baixados ao aplicar e rastreados', async ({ page }) => {
+    const { errors, patient } = await openWithPhoto(page)
+    await treatmentButton(page, 'Botox').click()
+    await openRegion(page, 'Testa')
+    await plus(page, 0).click()
+    await page.getByRole('button', { name: 'Novo lote' }).click()
+
+    const dialog = newLotDialog(page)
+    await expect(dialog.getByLabel('Produto')).toHaveValue('novo')
+    await expect(dialog.getByLabel('Tipo').locator('option')).toHaveText(['Toxina'])
+    await dialog.getByLabel('Marca', { exact: true }).fill('Marca E2E')
+    await dialog.getByLabel('Nome').fill('Toxina botulínica')
+    await dialog.getByLabel('Número do lote').fill('BTX-01')
+    await dialog.getByLabel('Validade').fill('2099-06-30')
+    await dialog.getByLabel('Quantidade (U)').fill('50')
+    await dialog.getByRole('button', { name: 'Salvar lote' }).click()
+    await expect(dialog).toHaveCount(0)
+    await expect(chosenLot(page)).toHaveText('Marca E2E Toxina botulínica · lote BTX-01 · val. 30/06/2099 · 50 U')
+    await expect(unsavedNote(page)).toBeVisible()
+
+    await saveButton(page).click()
+    await expect(page.getByRole('status').filter({ hasText: 'Plano salvo' })).toBeVisible()
+    await page.reload()
+    await expect(page.locator('.hotspot')).toHaveCount(33)
+    await openRegion(page, 'Testa')
+    await expect(chosenLot(page)).toContainText('lote BTX-01')
+
+    await page.getByRole('button', { name: 'Marcar como aplicado' }).click()
+    const confirm = page.getByRole('dialog', { name: 'Marcar como aplicado' })
+    await confirm.getByRole('button', { name: 'Marcar como aplicado' }).click()
+    await expect(page.getByRole('status').filter({ hasText: 'Aplicado. 1 baixa(s) no estoque' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Novo lote' })).toHaveCount(0)
+
+    await page.goto(`/pacientes/${patient.id}/prontuario`)
+    await expect(page.locator('tr').filter({ hasText: 'BTX-01' })).toContainText('val. 30/06/2099')
+    await page.goto('/estoque')
+    await expect(page.locator('tr').filter({ hasText: 'BTX-01' })).toContainText('48 U') // 50 U menos a dose de 2 U do ponto
+    expect(appErrors(errors)).toEqual([])
+  })
+
+  test('ml com produto do estoque: recusa validade vencida e número repetido, e cria o lote nesse produto', async ({ page }) => {
+    const { errors, api } = await openWithPhoto(page)
+    const product = await api.post('/inventory/products', { brand: 'Marca ML', name: 'Ácido hialurônico', kind: 'preenchedor', unit: 'ml' })
+    await api.post('/inventory/products', { brand: 'Marca U', name: 'Toxina', kind: 'toxina', unit: 'U' })
+    await api.post('/inventory/lots', { product_id: product.id, number: 'AH-01', expires_on: '2099-12-31', quantity: 1 })
+    await openRegion(page, 'Testa')
+    await plus(page, 0).click()
+    await page.getByRole('button', { name: 'Novo lote' }).click()
+
+    const dialog = newLotDialog(page)
+    await expect(dialog.getByLabel('Produto').locator('option')).toHaveText(['Marca ML Ácido hialurônico', 'Novo produto'])
+    await expect(dialog.getByLabel('Produto')).toHaveValue(String(product.id))
+    await expect(dialog.getByLabel('Marca', { exact: true })).toHaveCount(0)
+    await dialog.getByLabel('Número do lote').fill('AH-01')
+    await dialog.getByLabel('Validade').fill('2020-01-01')
+    await dialog.getByLabel('Quantidade (ml)').fill('2,5')
+    const saveLot = dialog.getByRole('button', { name: 'Salvar lote' })
+    await saveLot.click()
+    await expect(dialog.getByRole('alert')).toContainText('Validade 01/01/2020 já passou')
+    await dialog.getByLabel('Validade').fill('2099-12-31')
+    await saveLot.click()
+    await expect(dialog.getByRole('alert')).toContainText('Já existe um lote com esse número')
+    await dialog.getByLabel('Número do lote').fill('AH-02')
+    await saveLot.click()
+    await expect(dialog).toHaveCount(0)
+    await expect(chosenLot(page)).toHaveText('Marca ML Ácido hialurônico · lote AH-02 · val. 31/12/2099 · 2.5 ml')
+    await expect(unsavedNote(page)).toBeVisible()
+
+    expect(await api.get('/inventory/products')).toHaveLength(2)
+    const lots = await api.get('/inventory/lots')
+    expect(lots).toHaveLength(2)
+    expect(lots.find((l) => l.number === 'AH-02')).toMatchObject({ product_id: product.id, balance: 2.5 })
+    expect(appErrors(errors).filter((line) => !line.includes('status of 409'))).toEqual([])
+  })
+})
+
 test.describe('detecção real', () => {
   test('ajusta os pontos ao rosto e calcula a simetria', async ({ page }) => {
     test.setTimeout(180_000)

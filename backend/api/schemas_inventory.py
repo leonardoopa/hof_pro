@@ -2,11 +2,19 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
+from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, StringConstraints
 
 Qty = Annotated[Decimal, PlainSerializer(float, return_type=float, when_used="json")]
 KindKey = Literal["toxina", "preenchedor", "bioestimulador", "skinbooster", "outro"]
 UnitKey = Literal["ml", "U"]
+# Os espaços saem antes da conta do mínimo: número só com espaços é recusado, não gravado vazio.
+LotNumber = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=40)]
+
+
+class LotBase(BaseModel):
+    number: LotNumber
+    expires_on: date
+    quantity: Decimal = Field(gt=0, le=100000, max_digits=8, decimal_places=2)
 
 
 class ProductIn(BaseModel):
@@ -15,6 +23,7 @@ class ProductIn(BaseModel):
     kind: KindKey = "preenchedor"
     unit: UnitKey = "ml"
     anvisa_registration: str = Field(default="", max_length=40)
+    lot: LotBase | None = None  # primeiro lote, criado na mesma transação do produto
 
 
 class ProductPatch(BaseModel):
@@ -36,15 +45,12 @@ class ProductOut(BaseModel):
     active: bool
 
 
-class LotIn(BaseModel):
+class LotIn(LotBase):
     product_id: int
-    number: str = Field(min_length=1, max_length=40)
-    expires_on: date
-    quantity: Decimal = Field(gt=0, le=100000, max_digits=8, decimal_places=2)
 
 
 class LotPatch(BaseModel):
-    number: str | None = Field(default=None, min_length=1, max_length=40)
+    number: LotNumber | None = None
     expires_on: date | None = None
     balance: Decimal | None = Field(default=None, ge=0, le=100000, max_digits=8, decimal_places=2)
     reason: str | None = Field(default=None, max_length=200)  # obrigatório ao alterar o saldo
@@ -61,6 +67,10 @@ class LotOut(BaseModel):
     balance: Qty
     expired: bool
     days_to_expire: int
+
+
+class ProductCreatedOut(ProductOut):
+    lot: LotOut | None  # o lote criado junto, para quem chamou já poder selecioná-lo
 
 
 class MovementOut(BaseModel):

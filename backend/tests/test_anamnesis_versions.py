@@ -87,7 +87,7 @@ def test_version_keeps_the_question_as_it_was_asked(client, auth, url, questions
     client.put(url, json={"answers": [yes(alergia, "Dipirona")]}, headers=auth)
 
     latest, oldest = client.get(f"{url}/versions", headers=auth).json()
-    assert [a["question_text"] for a in latest["answers"]] == ["Tem alguma alergia?"]
+    assert [a["question_text"] for a in latest["answers"]] == ["Tem alguma alergia?", "É fumante?"]
     assert [a["question_text"] for a in oldest["answers"]] == ["Possui alergias?", "É fumante?"]
 
 
@@ -131,3 +131,29 @@ def test_demo_patient_starts_with_a_version_and_the_first_edit_keeps_it(client, 
     saved = client.put(url, json={"answers": [yes(alergia, "Dipirona"), no(fumante)]}, headers=auth).json()
     assert saved["version"] == 2
     assert client.get(f"{url}/versions", headers=auth).json()[1:] == first
+
+
+def test_deactivated_question_keeps_its_answer_and_does_not_block_saving(client, auth, url, questions):
+    alergia, fumante = questions
+    client.put(url, json={"notes": "Obs", "answers": [no(alergia), yes(fumante, "10 por dia")]}, headers=auth)
+    fumante.active = False
+    fumante.save()
+
+    # A tela lê a anamnese e devolve o que recebeu: sem mudança, nada muda.
+    form = client.get(url, headers=auth).json()
+    body = {"notes": form["notes"], "answers": form["answers"]}
+    assert client.put(url, json=body, headers=auth).json() == form
+    assert [a["question_id"] for a in form["answers"]] == [alergia.id]
+
+    # Mudar outra resposta não perde a da pergunta desativada.
+    assert client.put(url, json={"notes": "Obs", "answers": [yes(alergia, "Dipirona")]}, headers=auth).json()["version"] == 2
+    latest = client.get(f"{url}/versions", headers=auth).json()[0]
+    assert [(a["question_text"], a["detail"]) for a in latest["answers"]] == [("Possui alergias?", "Dipirona"), ("É fumante?", "10 por dia")]
+
+    # Responder uma pergunta desativada continua recusado.
+    assert client.put(url, json={"notes": "Obs", "answers": [no(fumante)]}, headers=auth).status_code == 422
+
+    # Reativada, a resposta volta ao formulário.
+    fumante.active = True
+    fumante.save()
+    assert {"question_id": fumante.id, "answer": True, "detail": "10 por dia"} in client.get(url, headers=auth).json()["answers"]
