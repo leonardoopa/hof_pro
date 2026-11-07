@@ -32,6 +32,7 @@ const centroid = (pts) => ({
 
 export default function FaceStage({
   imageUrl,
+  alt = 'Foto frontal do paciente',
   aspect,
   points,
   zone,
@@ -115,7 +116,7 @@ export default function FaceStage({
         className="stage-inner"
         style={{ '--s': s, transform: `translate(${tx * 100}%, ${ty * 100}%) scale(${s})` }}
       >
-        <img src={imageUrl} alt="Foto frontal do paciente" draggable={false} />
+        <img src={imageUrl} alt={alt} draggable={false} />
         {simUrl && (
           <img
             className="sim-layer"
