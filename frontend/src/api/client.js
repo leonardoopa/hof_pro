@@ -138,6 +138,15 @@ export const api = {
   reports: {
     usage: (from, to) => data(`/reports/usage?from=${from}&to=${to}`),
     returns: (days) => data(`/reports/returns?days=${days}`),
+    monthly: (month) => data(`/reports/monthly?month=${month}`),
+  },
+
+  appointments: {
+    list: (from, to) => data(`/appointments?from=${from}&to=${to}`),
+    create: (body) => data('/appointments', { method: 'POST', json: body }),
+    update: (id, body) => data(`/appointments/${id}`, { method: 'PATCH', json: body }),
+    setStatus: (id, status) => data(`/appointments/${id}/status`, { method: 'POST', json: { status } }),
+    convert: (id) => data(`/appointments/${id}/convert`, { method: 'POST' }),
   },
 
   demo: { load: () => data('/demo', { method: 'POST' }) },

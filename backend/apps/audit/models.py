@@ -15,6 +15,8 @@ class AccessLog(models.Model):
         REVEAL = "mostrar", "Mostrar dados"
         ARCHIVE = "arquivar", "Arquivar"
         UNARCHIVE = "reativar", "Reativar"
+        CREATE = "criar", "Criar"
+        UPDATE = "editar", "Editar"
         DELETE = "excluir", "Excluir"  # só em registros antigos: o sistema não apaga mais nada
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="access_logs")

@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     "apps.consent",
     "apps.guidance",
     "apps.audit",
+    "apps.scheduling",
 ]
 
 MIDDLEWARE = [

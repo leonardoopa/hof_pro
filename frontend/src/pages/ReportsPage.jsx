@@ -37,6 +37,114 @@ function Section({ title, sub, onExport, disabled, children }) {
   )
 }
 
+const monthLabel = (m) => {
+  const [y, mo] = m.split('-').map(Number)
+  return new Date(y, mo - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+}
+
+function MonthlySection({ setError }) {
+  const [month, setMonth] = useState(iso(new Date()).slice(0, 7))
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!month) return
+    setLoading(true)
+    api.reports
+      .monthly(month)
+      .then((r) => { setData(r); setError(null) })
+      .catch((e) => { setData(null); setError(e) })
+      .finally(() => setLoading(false))
+  }, [month, setError])
+
+  const exportCsv = () => {
+    const rows = [
+      ...data.patients.map((p) => ['Paciente', p.full_name, fmtDay(p.last_applied_at), p.applications, '', '']),
+      ...data.by_lot.map((r) => ['Lote', r.product_label, r.lot_number, `${fmtNum(r.total)} ${r.unit}`, r.applications, r.balance == null ? '' : `${fmtNum(r.balance)} ${r.unit}`]),
+    ]
+    downloadCsv(`mensal-${month}.csv`, ['Tipo', 'Nome/Produto', 'Última aplicação/Lote', 'Aplicações/Total', 'Aplicações', 'Saldo'], rows)
+  }
+
+  return (
+    <Section
+      title="Relatório mensal"
+      sub="Pacientes atendidos e produtos/lotes usados no mês. Pacientes com dados ocultos não aparecem."
+      disabled={!data || (!data.patients.length && !data.by_lot.length)}
+      onExport={exportCsv}
+    >
+      <div className="report-filters">
+        <label className="field">
+          <span>Mês</span>
+          <input className="input" type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
+        </label>
+      </div>
+      {loading && !data && <p className="report-empty">Carregando…</p>}
+      {data && (
+        <>
+          <div className="report-stats" aria-label={`Resumo de ${monthLabel(data.month)}`}>
+            <div><strong>{data.patients_count}</strong><span>pacientes atendidos</span></div>
+            <div><strong>{data.new_patients_count}</strong><span>novos cadastros</span></div>
+            <div><strong>{data.applications_count}</strong><span>aplicações</span></div>
+          </div>
+          <h3 className="report-h3">Pacientes do mês</h3>
+          {data.patients.length === 0 ? (
+            <p className="report-empty">Nenhum paciente atendido neste mês.</p>
+          ) : (
+            <table className="report-table">
+              <thead><tr><th>Paciente</th><th>Última aplicação</th><th className="num">Aplicações</th></tr></thead>
+              <tbody>
+                {data.patients.map((p) => (
+                  <tr key={p.patient_id}>
+                    <td>{p.full_name}</td>
+                    <td>{fmtDay(p.last_applied_at)}</td>
+                    <td className="num">{p.applications}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          <h3 className="report-h3">Produtos usados</h3>
+          {data.by_product.length === 0 ? (
+            <p className="report-empty">Nenhum produto usado neste mês.</p>
+          ) : (
+            <table className="report-table">
+              <thead><tr><th>Produto</th><th className="num">Total</th><th className="num">Aplicações</th></tr></thead>
+              <tbody>
+                {data.by_product.map((r) => (
+                  <tr key={`${r.product_id}-${r.unit}`}>
+                    <td>{r.product_label}</td>
+                    <td className="num">{fmtNum(r.total)} {r.unit}</td>
+                    <td className="num">{r.applications}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {data.by_lot.length > 0 && (
+            <>
+              <h3 className="report-h3">Lotes usados</h3>
+              <table className="report-table">
+                <thead><tr><th>Produto</th><th>Lote</th><th>Validade</th><th className="num">Usado</th><th className="num">Saldo</th></tr></thead>
+                <tbody>
+                  {data.by_lot.map((r) => (
+                    <tr key={`${r.lot_id}-${r.unit}`}>
+                      <td>{r.product_label}</td>
+                      <td>{r.lot_number}</td>
+                      <td>{r.expires_on ? new Date(`${r.expires_on}T12:00:00`).toLocaleDateString('pt-BR') : '—'}</td>
+                      <td className="num">{fmtNum(r.total)} {r.unit}</td>
+                      <td className="num">{r.balance == null ? '—' : `${fmtNum(r.balance)} ${r.unit}`}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+        </>
+      )}
+    </Section>
+  )
+}
+
 export default function ReportsPage() {
   const today = new Date()
   const [from, setFrom] = useState(iso(new Date(today.getTime() - 30 * 86_400_000)))
@@ -65,6 +173,8 @@ export default function ReportsPage() {
         </div>
       </div>
       <ErrorList error={error} />
+
+      <MonthlySection setError={setError} />
 
       <Section
         title="Uso por lote e produto"

@@ -1,4 +1,4 @@
-import { BarChart3, LogOut, Moon, Package, Sun, Users, Wallet } from 'lucide-react'
+import { BarChart3, CalendarDays, LogOut, Moon, Package, Sun, Users, Wallet } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { useTheme } from '../theme'
@@ -27,6 +27,10 @@ export default function AppLayout() {
           <NavLink to="/pacientes">
             <Users size={19} />
             <span>Pacientes</span>
+          </NavLink>
+          <NavLink to="/agenda">
+            <CalendarDays size={19} />
+            <span>Agenda</span>
           </NavLink>
           <NavLink to="/estoque">
             <Package size={19} />

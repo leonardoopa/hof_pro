@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from './auth/AuthContext'
 import AppLayout from './components/AppLayout'
+import AgendaPage from './pages/AgendaPage'
 import AnamnesisStep from './pages/AnamnesisStep'
 import AuthPage from './pages/AuthPage'
 import ConsentStep from './pages/ConsentStep'
@@ -41,6 +42,7 @@ export default function App() {
           <Route path="prontuario" element={<ConsentStep />} />
           <Route path="resumo" element={<GuidancePage />} />
         </Route>
+        <Route path="/agenda" element={<AgendaPage />} />
         <Route path="/estoque" element={<InventoryPage />} />
         <Route path="/relatorios" element={<ReportsPage />} />
         <Route
