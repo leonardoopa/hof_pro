@@ -14,7 +14,7 @@ export default function LotFields({ lot, set, unit }) {
       <div className="form-row">
         <label className="field">
           <span>Número do lote</span>
-          <input className="input" value={lot.number} onChange={set('number')} required />
+          <input className="input" value={lot.number} onChange={set('number')} pattern=".*\S.*" title="Informe o número do lote" required />
         </label>
         <label className="field">
           <span>Validade</span>

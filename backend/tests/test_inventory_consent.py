@@ -102,6 +102,21 @@ def test_product_without_lot_still_works(client, auth):
     assert client.get("/api/inventory/lots", headers=auth).json() == []
 
 
+def test_lot_number_of_only_spaces_is_refused(client, auth):
+    expires = (timezone.localdate() + timedelta(days=200)).isoformat()
+    blank = {"number": "   ", "expires_on": expires, "quantity": 5}
+    body = {"brand": "Allergan", "name": "Botox 100U", "kind": "toxina", "unit": "U"}
+    assert client.post("/api/inventory/products", json=body | {"lot": blank}, headers=auth).status_code == 422
+    assert client.get("/api/inventory/products", headers=auth).json() == []
+
+    prod = product(client, auth)
+    assert client.post("/api/inventory/lots", json=blank | {"product_id": prod["id"]}, headers=auth).status_code == 422
+    first = lot(client, auth, prod["id"], number="  L7  ").json()
+    assert first["number"] == "L7"
+    assert client.patch(f"/api/inventory/lots/{first['id']}", json={"number": "   "}, headers=auth).status_code == 422
+    assert client.get("/api/inventory/lots", headers=auth).json()[0]["number"] == "L7"
+
+
 def test_alerts_expired_and_expiring(client, auth):
     prod = product(client, auth)
     ok = lot(client, auth, prod["id"], "OK", days=90).json()
