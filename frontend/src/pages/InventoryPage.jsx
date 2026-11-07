@@ -319,55 +319,57 @@ export default function InventoryPage() {
                 </button>
               </div>
               {productLots.length ? (
-                <table className="inv-table">
-                  <thead>
-                    <tr>
-                      <th>Lote</th>
-                      <th>Validade</th>
-                      <th>Inicial</th>
-                      <th>Saldo</th>
-                      <th>Situação</th>
-                      <th />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {productLots.map((lot) => {
-                      const st = lotStatus(lot)
-                      return (
-                        <Fragment key={lot.id}>
-                        <tr>
-                          <td>{lot.number}</td>
-                          <td>{fmtDate(lot.expires_on)}</td>
-                          <td>
-                            {lot.initial_quantity} {lot.unit}
-                          </td>
-                          <td>
-                            <b>
-                              {lot.balance} {lot.unit}
-                            </b>
-                          </td>
-                          <td>
-                            <span className={`lot-status ${st.cls}`}>{st.text}</span>
-                          </td>
-                          <td className="inv-actions">
-                            <button
-                              className="icon-btn"
-                              aria-label={`Histórico do lote ${lot.number}`}
-                              onClick={() => setOpenHistory(openHistory === lot.id ? null : lot.id)}
-                            >
-                              <History size={14} />
-                            </button>
-                            <button className="icon-btn" aria-label={`Ajustar saldo do lote ${lot.number}`} onClick={() => setAdjusting(lot)}>
-                              <SlidersHorizontal size={14} />
-                            </button>
-                          </td>
-                        </tr>
-                        {openHistory === lot.id && <MovementsRow lotId={lot.id} />}
-                        </Fragment>
-                      )
-                    })}
-                  </tbody>
-                </table>
+                <div className="inv-table-wrap">
+                  <table className="inv-table">
+                    <thead>
+                      <tr>
+                        <th>Lote</th>
+                        <th>Validade</th>
+                        <th>Inicial</th>
+                        <th>Saldo</th>
+                        <th>Situação</th>
+                        <th />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {productLots.map((lot) => {
+                        const st = lotStatus(lot)
+                        return (
+                          <Fragment key={lot.id}>
+                          <tr>
+                            <td>{lot.number}</td>
+                            <td>{fmtDate(lot.expires_on)}</td>
+                            <td>
+                              {lot.initial_quantity} {lot.unit}
+                            </td>
+                            <td>
+                              <b>
+                                {lot.balance} {lot.unit}
+                              </b>
+                            </td>
+                            <td>
+                              <span className={`lot-status ${st.cls}`}>{st.text}</span>
+                            </td>
+                            <td className="inv-actions">
+                              <button
+                                className="icon-btn"
+                                aria-label={`Histórico do lote ${lot.number}`}
+                                onClick={() => setOpenHistory(openHistory === lot.id ? null : lot.id)}
+                              >
+                                <History size={14} />
+                              </button>
+                              <button className="icon-btn" aria-label={`Ajustar saldo do lote ${lot.number}`} onClick={() => setAdjusting(lot)}>
+                                <SlidersHorizontal size={14} />
+                              </button>
+                            </td>
+                          </tr>
+                          {openHistory === lot.id && <MovementsRow lotId={lot.id} />}
+                          </Fragment>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               ) : (
                 <p className="inv-meta">Sem lotes.</p>
               )}

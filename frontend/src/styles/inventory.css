@@ -4,6 +4,8 @@
 .inv-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .inv-meta { display: block; color: var(--muted); font-size: 13px; }
 .inv-alerts .alert { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+/* No celular a tabela rola dentro do card, e a página não rola para o lado. */
+.inv-table-wrap { overflow-x: auto; }
 .inv-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .inv-table th { text-align: left; color: var(--muted); font-weight: 500; font-size: 12px; padding: 4px 8px; }
 .inv-table td { padding: 8px; border-top: 1px solid var(--line); }
