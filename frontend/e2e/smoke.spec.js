@@ -268,7 +268,9 @@ test('relatórios: abre e exporta o CSV de uso', async ({ page }) => {
   await page.goto('/relatorios')
   await expect(page.getByRole('heading', { name: 'Relatórios' })).toBeVisible()
 
-  const exportButton = page.getByRole('button', { name: 'Exportar CSV' }).first()
+  // Cada seção tem o próprio "Exportar CSV": o relatório mensal vem antes do de uso.
+  const usage = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Uso por lote e produto' }) })
+  const exportButton = usage.getByRole('button', { name: 'Exportar CSV' })
   await expect(exportButton, 'a aplicação de hoje precisa entrar no período padrão').toBeEnabled()
   const [download] = await Promise.all([page.waitForEvent('download'), exportButton.click()])
   expect(download.suggestedFilename()).toMatch(/^uso-.*\.csv$/)
