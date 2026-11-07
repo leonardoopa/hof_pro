@@ -1,4 +1,4 @@
-import { AlertTriangle, Camera, CheckCheck, ChevronLeft, Crosshair, Eye, EyeOff, Minus, Plus, Save, ScanFace, Sparkles, Trash2, Upload } from 'lucide-react'
+import { AlertTriangle, Camera, CheckCheck, ChevronLeft, Crosshair, Eye, EyeOff, Minus, PackagePlus, Plus, Save, ScanFace, Sparkles, Trash2, Upload } from 'lucide-react'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useOutletContext } from 'react-router-dom'
 import { api } from '../api/client'
@@ -8,6 +8,7 @@ import { useToast } from '../components/Toast'
 import CameraCapture from '../planning/CameraCapture'
 import { detectFace } from '../planning/faceLandmarks'
 import FaceStage from '../planning/FaceStage'
+import NewLotModal from '../planning/NewLotModal'
 import {
   BILATERAL,
   GROUPS,
@@ -102,6 +103,7 @@ export default function PlanningStep() {
   const [confirm, setConfirm] = useState(null) // { title, message, confirmLabel, onConfirm }
   const [suggested, setSuggested] = useState([]) // regiões destacadas pelo painel de simetria
   const [lots, setLots] = useState([]) // lotes disponíveis (saldo > 0 e válidos) do estoque
+  const [lotFor, setLotFor] = useState(null) // ponto que recebe um lote novo, criado no modal
 
   const [treatment, setTreatment] = useState('preenchimento')
   const [zone, setZone] = useState(null) // { region, side } em zoom
@@ -771,21 +773,28 @@ export default function PlanningStep() {
                               ))}
                             </select>
                           </label>
-                          <label className="lot">
-                            <span>Lote (opcional)</span>
-                            <select
-                              className="input mini"
-                              value={p.lot_id ?? ''}
-                              onChange={(e) => patchPoint(p.uid, { lot_id: e.target.value ? Number(e.target.value) : null })}
-                            >
-                              <option value="">Sem lote</option>
-                              {lotOptions(p).map((l) => (
-                                <option key={l.id} value={l.id}>
-                                  {l.stale ? `Lote #${l.id} (indisponível)` : lotLabel(l)}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
+                          <div className="lot">
+                            <label>
+                              <span>Lote (opcional)</span>
+                              <select
+                                className="input mini"
+                                value={p.lot_id ?? ''}
+                                onChange={(e) => patchPoint(p.uid, { lot_id: e.target.value ? Number(e.target.value) : null })}
+                              >
+                                <option value="">Sem lote</option>
+                                {lotOptions(p).map((l) => (
+                                  <option key={l.id} value={l.id}>
+                                    {l.stale ? `Lote #${l.id} (indisponível)` : lotLabel(l)}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            {!applied && (
+                              <button type="button" className="btn small" onClick={() => setLotFor({ uid: p.uid, treatment: p.treatment })}>
+                                <PackagePlus size={15} /> Novo lote
+                              </button>
+                            )}
+                          </div>
                         </div>
                       )}
                       </Fragment>
@@ -817,6 +826,18 @@ export default function PlanningStep() {
 
       {camera && <CameraCapture onCapture={addPhoto} onClose={() => setCamera(false)} />}
       {confirm && <ConfirmModal {...confirm} onClose={() => setConfirm(null)} />}
+      {lotFor && (
+        <NewLotModal
+          treatment={lotFor.treatment}
+          onClose={() => setLotFor(null)}
+          onSaved={(lot) => {
+            // O lote novo já é estoque de verdade; escolhê-lo no ponto é alteração do plano, como qualquer outra.
+            setLots((ls) => [...ls, lot])
+            patchPoint(lotFor.uid, { lot_id: lot.id })
+            setLotFor(null)
+          }}
+        />
+      )}
       {toastNode}
     </div>
   )

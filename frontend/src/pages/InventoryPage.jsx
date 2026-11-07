@@ -2,40 +2,12 @@ import { AlertTriangle, History, Package, Plus, SlidersHorizontal } from 'lucide
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { api } from '../api/client'
 import ErrorList from '../components/ErrorList'
+import LotFields, { KINDS } from '../components/LotFields'
 import Modal from '../components/Modal'
 import { parseAmount } from '../planning/regions'
 import { fmtDate } from '../planning/technique'
 
-const KINDS = [
-  { key: 'toxina', label: 'Toxina', unit: 'U' },
-  { key: 'preenchedor', label: 'Preenchedor', unit: 'ml' },
-  { key: 'bioestimulador', label: 'Bioestimulador', unit: 'ml' },
-  { key: 'skinbooster', label: 'Skinbooster', unit: 'ml' },
-  { key: 'outro', label: 'Outro', unit: 'ml' },
-]
 const kindLabel = (key) => KINDS.find((k) => k.key === key)?.label ?? key
-
-// Campos de um lote novo, iguais na entrada de lote e no cadastro do produto.
-function LotFields({ lot, set, unit }) {
-  return (
-    <>
-      <div className="form-row">
-        <label className="field">
-          <span>Número do lote</span>
-          <input className="input" value={lot.number} onChange={set('number')} required />
-        </label>
-        <label className="field">
-          <span>Validade</span>
-          <input className="input" type="date" value={lot.expires_on} onChange={set('expires_on')} required />
-        </label>
-      </div>
-      <label className="field">
-        <span>Quantidade ({unit})</span>
-        <input className="input" inputMode="decimal" pattern="\d+([.,]\d{1,2})?" title="Até duas casas decimais, ex.: 12,5" value={lot.quantity} onChange={set('quantity')} required />
-      </label>
-    </>
-  )
-}
 
 function ProductModal({ onClose, onSaved }) {
   const [form, setForm] = useState({ brand: '', name: '', kind: 'preenchedor', unit: 'ml', anvisa_registration: '' })
