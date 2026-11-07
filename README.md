@@ -68,14 +68,14 @@ Testes:
 - **Pacientes**: lista com busca, cadastro, arquivamento e ocultação de dados. Nada é apagado.
 - **Anamnese**: 15 perguntas sim/não semeadas por migration (editáveis no admin Django). "Sim" exige descrição. Cada alteração salva vira uma versão que não muda mais, com autor, data e a pergunta como foi feita; a tela mostra o histórico e o que mudou em cada versão. Anamnese salva antes deste recurso começa na versão 1, com o estado em que estava: o que já tinha sido sobrescrito não volta. Pergunta desativada sai do formulário, e a resposta já dada segue guardada e visível no histórico.
 - **Planejamento facial**:
-  - foto frontal pela câmera ou por upload;
-  - o MediaPipe detecta o rosto no navegador e posiciona os pontos sugeridos em 19 regiões:
+  - **base do plano**: foto frontal do paciente (câmera ou upload) ou **rosto simétrico de referência** (desenho de linhas, sem foto; o plano é salvo sem foto e os pontos valem para o desenho). Trocar de uma base para outra apaga os pontos colocados, porque as posições são da imagem. No rosto de referência não há simulação nem painel de simetria;
+  - **o plano começa vazio**: a lista de regiões só mostra as regiões em que já há pontos, e uma região entra na lista quando o primeiro ponto é colocado nela (escolha a região em "Adicionar região", toque em "Adicionar ponto" e marque na imagem). O botão "Sugerir pontos" (só com o plano vazio) coloca os pontos sugeridos de uma vez: o MediaPipe detecta o rosto no navegador e posiciona os pontos, ou usa a posição padrão no rosto de referência. As 19 regiões são:
     - terço superior: testa, glabela, têmporas, periorbital (pés de galinha);
     - terço médio: olheiras, nariz (inclui bunny lines), zigomático, malar, submalar, nasolabial, sorriso gengival (LLSAN);
     - terço inferior: boca, marionete, DAO, mento (inclui mentual), pré-jowl, mandíbula, masseter;
     - pescoço: platisma;
   - cada ponto sugerido tem nome anatômico (ex.: prócero, corrugador medial, arco do cupido), salvo no plano; a região mostra um alerta de risco quando o estudo em `docs/IMPLEMENTACAO-FOTO-PONTOS-ANTES-DEPOIS.md` tem fonte para ele. Doses de referência não aparecem até serem validadas por profissional;
-  - planos salvos antes dos nomes de ponto ganham as regiões que faltam (quantidade 0) ao abrir; nos demais, região vazia é escolha do profissional e continua vazia;
+  - planos já salvos abrem como foram salvos, sem regiões acrescentadas;
   - tocar numa região dá zoom e mostra os pontos; cada ponto tem produto e quantidade, pode ser arrastado, removido ou adicionado;
   - resumo ao vivo: total de ml (preenchimentos), unidades (toxina) e número de áreas;
   - **Simular resultado**: comparação antes/depois ilustrativa, com divisor (suavização para toxina, volume local para preenchedores, clareamento do vinco nos sulcos).
