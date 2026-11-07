@@ -85,6 +85,8 @@ Testes:
 - **Evolução**: comparação antes/depois de fotos do paciente, com alinhamento pelos olhos.
 - **Resumo e Orientações**: orientações pós-procedimento por tratamento, geradas a partir do plano, imprimíveis.
 - **Design system** (`styles/tokens.css`) com tema claro/escuro e alternador.
+- **Relatório mensal** (`GET /api/reports/monthly?month=AAAA-MM`): pacientes atendidos no mês (com novos cadastros e nº de aplicações), produtos e lotes usados (total em U/ml, validade e saldo atual), exportação CSV. Pacientes com dados ocultos ficam de fora.
+- **Agenda** (app `scheduling`, `/api/appointments`): visão semanal, agendamento de paciente cadastrado ou de novo paciente (nome/telefone), status (agendado, confirmado, realizado, cancelado, faltou), conflito de horário (409) e conversão do lead em paciente. Auditado.
 - Financeiro aparece como "Em breve".
 
 ## Decisões e limites
@@ -99,7 +101,15 @@ Testes:
 - O MediaPipe roda localmente: a foto não vai para nenhum serviço. Só o runtime WASM (jsDelivr) e o modelo (Google Storage) são baixados; para produção ou uso offline, hospede os dois (`frontend/src/planning/faceLandmarks.js`).
 - Sem refresh token ainda. O limite de tentativas de login fica em memória: com vários processos, precisa de armazenamento compartilhado.
 
+## Decisões da agenda e do relatório mensal
+
+- Agendamento nunca é apagado: cancelar muda o status, e agendamento cancelado não ocupa o horário (reativar exige o horário livre). O conflito é por profissional.
+- Novo paciente é um "lead" (nome e telefone no próprio agendamento); "Cadastrar como paciente" cria o cadastro e vincula. Não há checagem de duplicidade com pacientes existentes.
+- Agenda semanal de 07h às 20h, sem recorrência, sem lembretes e sem integração com calendário externo.
+- O relatório mensal reaproveita a consulta de `/reports/usage`; o consumo de produto inclui aplicações de pacientes com dados ocultos (estoque não expõe dado pessoal), mas a lista de pacientes não.
+
 ## Próximos passos
 
-1. Financeiro (orçamentos e recebimentos) e histórico por paciente.
-2. Simulação por IA a partir do planejamento.
+1. Agenda: lembretes por WhatsApp/e-mail, recorrência, bloqueio de horários e visão diária no celular.
+2. Financeiro (orçamentos e recebimentos) e histórico por paciente.
+3. Simulação por IA a partir do planejamento.
