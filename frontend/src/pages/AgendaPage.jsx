@@ -1,6 +1,6 @@
 import { ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import ErrorList from '../components/ErrorList'
 import Modal from '../components/Modal'
@@ -17,6 +17,7 @@ const weekStart = (d) => addDays(d, -((d.getDay() + 6) % 7)) // segunda-feira
 const at = (day, time) => new Date(`${day}T${time}:00`)
 
 function AppointmentForm({ initial, patients, onClose, onSaved }) {
+  const navigate = useNavigate()
   const editing = Boolean(initial.id)
   const start = initial.starts_at ? new Date(initial.starts_at) : null
   const end = initial.ends_at ? new Date(initial.ends_at) : null
@@ -120,7 +121,7 @@ function AppointmentForm({ initial, patients, onClose, onSaved }) {
               </Link>
             )}
             {!initial.patient_id && (
-              <button type="button" className="btn small" disabled={busy} onClick={() => run(() => api.appointments.convert(initial.id))}>
+              <button type="button" className="btn small" disabled={busy} onClick={() => run(async () => { const r = await api.appointments.convert(initial.id); navigate(`/pacientes/${r.patient_id}`) })}>
                 Cadastrar como paciente
               </button>
             )}
@@ -180,6 +181,7 @@ export default function AgendaPage() {
     }
     return Array.from({ length: to - from + 1 }, (_, i) => i + from)
   }, [visible])
+  const lanes = useMemo(() => computeLanes(visible), [visible])
   const canceledCount = (items ?? []).filter((a) => a.status === 'cancelado').length
   const title = `${days[0].toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })} – ${days[6].toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}`
 
@@ -188,7 +190,7 @@ export default function AgendaPage() {
       <div className="page-head">
         <div>
           <h1>Agenda</h1>
-          <p>Marque consultas e novos pacientes. Clique em um horário vazio para agendar.</p>
+          <p>Marque consultas e novos pacientes. Clique em um horário para agendar; em horário ocupado, use a faixa livre à direita.</p>
         </div>
         <button className="btn primary" onClick={() => openNew(new Date(), new Date().getHours() < 20 ? Math.max(7, new Date().getHours() + 1) : 8)}>
           Novo agendamento
@@ -215,7 +217,7 @@ export default function AgendaPage() {
             </div>
           ))}
           {hours.map((h) => (
-            <Row key={h} hour={h} days={days} items={visible} onNew={openNew} onOpen={setEditing} />
+            <Row key={h} hour={h} days={days} items={visible} lanes={lanes} onNew={openNew} onOpen={setEditing} />
           ))}
         </div>
       </div>
@@ -224,7 +226,40 @@ export default function AgendaPage() {
   )
 }
 
-function Row({ hour, days, items, onNew, onOpen }) {
+// Divide o dia em faixas para agendamentos que se sobrepõem (inclusive cancelados exibidos),
+// de modo que nenhum fique escondido atrás de outro.
+function computeLanes(items) {
+  const byDay = new Map()
+  for (const a of items) {
+    const k = iso(new Date(a.starts_at))
+    byDay.set(k, [...(byDay.get(k) ?? []), a])
+  }
+  const lanes = new Map()
+  for (const list of byDay.values()) {
+    const sorted = [...list].sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at) || a.id - b.id)
+    let cluster = []
+    let clusterEnd = 0
+    const flush = () => {
+      const n = Math.max(1, ...cluster.map((c) => c.lane + 1))
+      cluster.forEach((c) => lanes.set(c.id, { lane: c.lane, lanes: n }))
+      cluster = []
+    }
+    for (const a of sorted) {
+      const s = new Date(a.starts_at).getTime()
+      const e = new Date(a.ends_at).getTime()
+      if (cluster.length && s >= clusterEnd) flush()
+      const used = new Set(cluster.filter((c) => c.end > s).map((c) => c.lane))
+      let lane = 0
+      while (used.has(lane)) lane += 1
+      cluster.push({ id: a.id, lane, end: e })
+      clusterEnd = Math.max(clusterEnd, e)
+    }
+    flush()
+  }
+  return lanes
+}
+
+function Row({ hour, days, items, lanes, onNew, onOpen }) {
   return (
     <>
       <div className="agenda-hour">{String(hour).padStart(2, '0')}:00</div>
@@ -239,12 +274,21 @@ function Row({ hour, days, items, onNew, onOpen }) {
             {here.map((a) => {
               const s = new Date(a.starts_at)
               const mins = (new Date(a.ends_at) - s) / 60_000
+              const { lane, lanes: n } = lanes.get(a.id) ?? { lane: 0, lanes: 1 }
+              const name = a.patient_name || a.lead_name
+              const detail = `${hhmm(s)} · ${a.kind || STATUS[a.status]}${!a.patient_id ? ' · novo' : ''}`
               return (
-                <button key={a.id} className={`agenda-appt ${a.status}`}
-                  style={{ top: (s.getMinutes() / 60) * ROW, height: Math.max(20, (mins / 60) * ROW - 2) }}
+                <button key={a.id} className={`agenda-appt ${a.status}`} title={`${name} — ${detail}`}
+                  style={{
+                    top: (s.getMinutes() / 60) * ROW,
+                    height: Math.max(30, (mins / 60) * ROW - 2),
+                    // a faixa de 14px à direita fica livre para clicar no horário e agendar outro
+                    left: `calc(2px + (100% - 16px) * ${lane / n})`,
+                    width: `calc((100% - 16px) * ${1 / n} - 2px)`,
+                  }}
                   onClick={() => onOpen(a)}>
-                  {a.patient_name || a.lead_name}
-                  <small>{hhmm(s)} · {a.kind || STATUS[a.status]}{!a.patient_id ? ' · novo' : ''}</small>
+                  <span className="agenda-appt-name">{name}</span>
+                  <small>{detail}</small>
                 </button>
               )
             })}
