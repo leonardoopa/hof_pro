@@ -11,6 +11,7 @@ import './styles/point-detail.css'
 import './styles/inventory.css'
 import './styles/consent.css'
 import './styles/reports.css'
+import './styles/agenda.css'
 
 initTheme()
 
