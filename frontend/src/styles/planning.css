@@ -748,6 +748,7 @@
   right: var(--space-3);
   bottom: var(--space-3);
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   justify-items: center;
   gap: var(--space-2);
   pointer-events: none;
@@ -803,6 +804,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  min-width: 0;
   max-width: 100%;
   padding: 5px 6px 5px 5px;
   border-radius: var(--radius-pill);
@@ -868,12 +870,9 @@
   transform: translateX(-50%);
 }
 
-/* pontos aparecem com um salto curto; hotspots entram suaves */
+/* pontos aparecem com um salto curto (hotspot fica parado: vazio é um anel leve, sem pulsar) */
 .pt {
   animation: pt-pop 0.38s var(--ease) both;
-}
-.hotspot {
-  animation: hud-fade 0.35s var(--ease) both;
 }
 
 /* painel da região aberta */
@@ -1025,6 +1024,15 @@
   /* com um ponto escolhido, o editor dele toma o lugar da dica */
   .hud-point ~ .hud-hint {
     display: none;
+  }
+  .hud-point {
+    gap: 4px;
+  }
+  .hud-point-name {
+    max-width: 110px;
+  }
+  .hud-point-amount {
+    min-width: 48px;
   }
   .hud-hint.hud-top {
     white-space: normal;

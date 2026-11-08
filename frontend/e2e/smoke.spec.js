@@ -121,6 +121,30 @@ test('anamnese: cada alteração salva vira uma versão e as anteriores continua
   expect(errors).toEqual([])
 })
 
+test('termos: só aparecem os dos tratamentos do plano, mais o de uso de imagem', async ({ page }) => {
+  const errors = collectPageErrors(page)
+  const api = await signIn(page)
+  const patient = await createPatient(api)
+  const terms = await api.get('/consent/terms')
+  const termRow = (kind) => page.locator('.term-row').filter({ hasText: terms.find((t) => t.kind === kind).title })
+  await page.goto(`/pacientes/${patient.id}/prontuario`)
+  await expect(page.getByText('Nenhum tratamento no plano ainda')).toBeVisible()
+  await expect(page.locator('.term-row')).toHaveCount(1)
+  await expect(termRow('uso_imagem')).toBeVisible()
+
+  await api.post(`/patients/${patient.id}/plans`, {
+    points: [
+      { region: 'testa', treatment: 'botox', x: 0.5, y: 0.2, amount: 4 },
+      { region: 'malar', treatment: 'preenchimento', x: 0.3, y: 0.5, amount: 0 }, // sem quantidade não pede termo
+    ],
+  })
+  await page.reload()
+  await expect(termRow('botox')).toBeVisible()
+  await expect(termRow('preenchimento')).toHaveCount(0)
+  await expect(page.locator('.term-row')).toHaveCount(2)
+  expect(errors).toEqual([])
+})
+
 test('termo de uso de imagem: assinado desenhando no canvas e depois revogado', async ({ page }) => {
   const errors = collectPageErrors(page)
   const api = await signIn(page)
@@ -478,7 +502,7 @@ test('paciente: ocultar dados não apaga, e "Mostrar dados" traz tudo de volta',
   const patient = await createPatient(api, 'Nome Para Ocultar')
   await page.goto(`/pacientes/${patient.id}/planejamento`)
   await page.locator('input[type=file]').setInputFiles(await syntheticPhoto(page))
-  await expect(page.locator('.hotspot')).toHaveCount(33)
+  await expect(page.getByAltText('Foto frontal do paciente')).toBeVisible()
 
   await page.getByRole('button', { name: 'Ocultar dados' }).click()
   await page.getByRole('dialog', { name: 'Ocultar dados do paciente' }).getByRole('button', { name: 'Ocultar dados' }).click()
@@ -504,6 +528,9 @@ test('paciente: "Mostrar dados" com a tela de planejamento aberta mantém o rasc
   const patient = await createPatient(api, 'Nome Com Rascunho')
   await page.goto(`/pacientes/${patient.id}/planejamento`)
   await page.locator('input[type=file]').setInputFiles(await syntheticPhoto(page))
+  await expect(page.getByAltText('Foto frontal do paciente')).toBeVisible()
+  // Os pontos sugeridos são o rascunho que precisa sobreviver a ocultar e mostrar.
+  await page.getByRole('button', { name: 'Sugerir pontos' }).click()
   await expect(page.locator('.hotspot')).toHaveCount(33)
   const notes = page.getByPlaceholder(/assimetria leve/)
   await notes.fill('rascunho sem salvar')
@@ -582,7 +609,7 @@ test('planejamento: foto pela câmera vira a foto do plano', async ({ page }) =>
   await expect(dialog.getByRole('button', { name: 'Capturar' })).toBeEnabled({ timeout: 15_000 })
   await dialog.getByRole('button', { name: 'Capturar' }).click()
   await expect(dialog).toHaveCount(0)
-  await expect(page.locator('.hotspot')).toHaveCount(33)
+  await expect(page.getByAltText('Foto frontal do paciente')).toBeVisible()
   expect((await api.get(`/patients/${patient.id}/photos`)).length).toBe(1)
   expect(appErrors(errors)).toEqual([])
 })

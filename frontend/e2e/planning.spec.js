@@ -19,12 +19,19 @@ async function prepare(page) {
   return { errors, api, patient }
 }
 
+/** Foto enviada e pontos sugeridos: o plano começa vazio, e estes testes partem do modelo inteiro. */
 async function openWithPhoto(page, makePhoto = syntheticPhoto) {
   const context = await prepare(page)
   await page.goto(planningUrl(context.patient))
   await page.locator('input[type=file]').setInputFiles(await makePhoto(page))
-  await expect(page.locator('.hotspot')).toHaveCount(33)
+  await suggest(page)
   return context
+}
+
+async function suggest(page) {
+  await expect(photoImage(page)).toBeVisible()
+  await page.getByRole('button', { name: 'Sugerir pontos' }).click()
+  await expect(page.locator('.hotspot')).toHaveCount(33)
 }
 
 /** Traços finos na foto inteira: suavizar uma área lisa da foto sintética não muda nada, e isso não seria defeito da simulação. */
@@ -79,7 +86,8 @@ const planWithAmountsIn = (...regions) =>
   }))
 
 const regionRow = (page, label) => page.locator('.region-row').filter({ has: page.getByText(label, { exact: true }) })
-const summary = (page, label) => page.locator('.summary > div').filter({ hasText: label }).locator('dd')
+// Totais do cabeçalho; o título diz qual é qual.
+const summary = (page, label) => page.getByTitle(new RegExp(`^${label}`))
 const treatmentButton = (page, name) =>
   page.getByRole('group', { name: 'Tratamento a aplicar' }).getByRole('button', { name: new RegExp(`^${name}`) })
 const backToOverview = (page) => page.getByRole('button', { name: 'Todas as regiões' })
@@ -284,11 +292,11 @@ test.describe('quantidade e simulação ao vivo', () => {
     await openRegion(page, 'Testa')
 
     const steps = [
-      { name: 'Preenchimento', key: 'preenchimento', value: '0,2', unit: 'ml', ml: '0,2 ml', units: '0 un' },
-      { name: 'Botox', key: 'botox', value: '2', unit: 'U', ml: '0,2 ml', units: '2 un' },
-      { name: 'Bioestimulador', key: 'bioestimulador', value: '0,5', unit: 'ml', ml: '0,7 ml', units: '2 un' },
-      { name: 'Skinbooster', key: 'skinbooster', value: '0,1', unit: 'ml', ml: '0,8 ml', units: '2 un' },
-      { name: 'Outro', key: 'outro', value: '0,1', unit: 'ml', ml: '0,9 ml', units: '2 un' },
+      { name: 'Preenchimento', key: 'preenchimento', value: '0,2', unit: 'ml', ml: '0,2 ml', units: '0 U' },
+      { name: 'Botox', key: 'botox', value: '2', unit: 'U', ml: '0,2 ml', units: '2 U' },
+      { name: 'Bioestimulador', key: 'bioestimulador', value: '0,5', unit: 'ml', ml: '0,7 ml', units: '2 U' },
+      { name: 'Skinbooster', key: 'skinbooster', value: '0,1', unit: 'ml', ml: '0,8 ml', units: '2 U' },
+      { name: 'Outro', key: 'outro', value: '0,1', unit: 'ml', ml: '0,9 ml', units: '2 U' },
     ]
     for (const [index, step] of steps.entries()) {
       await treatmentButton(page, step.name).click()
@@ -298,7 +306,7 @@ test.describe('quantidade e simulação ao vivo', () => {
       await expect(row(page, index).getByRole('combobox', { name: `Tratamento do ponto ${index + 1}` })).toHaveValue(step.key)
       await expect(summary(page, 'Total de ml')).toHaveText(step.ml)
       await expect(summary(page, 'Total de unidades')).toHaveText(step.units)
-      await expect(summary(page, 'Número de áreas')).toHaveText('1')
+      await expect(summary(page, 'Número de áreas')).toHaveText('1 área')
     }
 
     await plus(page, 0).click()
@@ -306,7 +314,7 @@ test.describe('quantidade e simulação ao vivo', () => {
     await expect(summary(page, 'Total de ml')).toHaveText('1 ml')
     await plus(page, 1).click()
     await expect(amountInput(page, 1)).toHaveValue('3')
-    await expect(summary(page, 'Total de unidades')).toHaveText('3 un')
+    await expect(summary(page, 'Total de unidades')).toHaveText('3 U')
     await minus(page, 1).click()
     await expect(amountInput(page, 1)).toHaveValue('2')
 
@@ -315,7 +323,7 @@ test.describe('quantidade e simulação ao vivo', () => {
     await openRegion(page, 'Nariz')
     await treatmentButton(page, 'Preenchimento').click()
     await plus(page, 0).click()
-    await expect(summary(page, 'Número de áreas')).toHaveText('2')
+    await expect(summary(page, 'Número de áreas')).toHaveText('2 áreas')
     await expect(summary(page, 'Total de ml')).toHaveText('1,2 ml')
     expect(appErrors(errors)).toEqual([])
   })
@@ -360,8 +368,8 @@ test.describe('quantidade e simulação ao vivo', () => {
   ]) {
     test(`dose inicial de ${treatment} em ${regionLabel} já muda a foto`, async ({ page }) => {
       const { errors } = await openWithPhoto(page, texturedPhoto)
-      await treatmentButton(page, treatment).click()
       await openRegion(page, regionLabel)
+      await treatmentButton(page, treatment).click()
       const spot = await fractionOf(page.locator('.pt').first())
       await plus(page, 0).click()
       await expect(page.locator('.sim-layer')).toBeAttached({ timeout: 3000 })
@@ -467,7 +475,7 @@ test.describe('quantidade e simulação ao vivo', () => {
     await plus(page, 0).click()
     await expect(row(page, 0).getByRole('combobox', { name: 'Tratamento do ponto 1' })).toHaveValue('botox')
     await expect(amountInput(page, 0)).toHaveValue('2')
-    await expect(summary(page, 'Total de unidades')).toHaveText('2 un')
+    await expect(summary(page, 'Total de unidades')).toHaveText('2 U')
     expect(appErrors(errors)).toEqual([])
   })
 
@@ -570,7 +578,76 @@ test.describe('quantidade e simulação ao vivo', () => {
     await amountInput(page, 1).fill('0')
     await expect(page.locator('.sim-layer')).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Simular resultado' })).toHaveAttribute('aria-pressed', 'false')
-    await expect(summary(page, 'Número de áreas')).toHaveText('0')
+    await expect(summary(page, 'Número de áreas')).toHaveText('0 áreas')
+    expect(appErrors(errors)).toEqual([])
+  })
+})
+
+/** Centro de uma região no rosto de referência: a média das posições sugeridas dela. */
+function centerOf(region, side = 'C') {
+  const pts = fallbackTemplate().filter((p) => p.region === region && p.side === side)
+  return { x: pts.reduce((sum, p) => sum + p.x, 0) / pts.length, y: pts.reduce((sum, p) => sum + p.y, 0) / pts.length }
+}
+
+async function openModelFace(page) {
+  const context = await prepare(page)
+  await page.goto(planningUrl(context.patient))
+  await page.getByRole('button', { name: 'Rosto simétrico' }).click()
+  await expect(page.getByAltText('Rosto simétrico de referência')).toBeVisible()
+  return context
+}
+
+test.describe('o rosto é o alvo', () => {
+  test('com o plano vazio, o cursor mostra a região e o toque abre e amplia a mais próxima', async ({ page }) => {
+    const { errors } = await openModelFace(page)
+    await expect(page.locator('.hotspot')).toHaveCount(0)
+    await expect(page.locator('.region-row')).toHaveCount(0)
+    const stage = await page.locator('.stage').boundingBox()
+    const at = ({ x, y }) => ({ x: stage.width * x, y: stage.height * y })
+
+    const malar = at(centerOf('malar', 'E'))
+    await page.mouse.move(stage.x + malar.x, stage.y + malar.y)
+    await expect(page.locator('.region-aim b')).toHaveText('Malar E')
+
+    await page.locator('.stage').click({ position: at(centerOf('nariz')) })
+    await expect(page.locator('.stage-toolbar strong')).toHaveText('Nariz')
+    await settled(page)
+    const scale = await page.locator('.stage-inner').evaluate((el) => Number(el.style.getPropertyValue('--s')))
+    expect(scale, 'a região vazia também amplia').toBeGreaterThan(1.5)
+    await expect(page.getByText('Nenhum ponto nesta região')).toBeVisible()
+    await expect(page.locator('.region-row'), 'região sem ponto não entra na lista').toHaveCount(0)
+    expect(appErrors(errors)).toEqual([])
+  })
+
+  test('o tratamento escolhido sobre a imagem marca um ponto a cada toque, até concluir', async ({ page }) => {
+    const { errors } = await openModelFace(page)
+    await page.getByLabel('Ir para região').selectOption({ label: 'Nariz' })
+    await settled(page)
+    await treatmentButton(page, 'Botox').click()
+    await expect(treatmentButton(page, 'Botox')).toHaveAttribute('aria-pressed', 'true')
+
+    const stage = await page.locator('.stage').boundingBox()
+    await page.locator('.stage').click({ position: { x: stage.width * 0.4, y: stage.height * 0.45 } })
+    await page.locator('.stage').click({ position: { x: stage.width * 0.6, y: stage.height * 0.45 } })
+    await expect(page.locator('.prow')).toHaveCount(2)
+    await expect(amountInput(page, 1)).toHaveValue('2')
+    await expect(row(page, 1).locator('.unit')).toHaveText('U')
+
+    // O ponto marcado fica escolhido, com a quantidade à mão sobre a imagem.
+    await page.getByRole('button', { name: 'Aumentar o ponto selecionado' }).click()
+    await expect(page.locator('.hud-point-amount')).toHaveText('3 U')
+    await expect(amountInput(page, 1)).toHaveValue('3')
+
+    await page.getByRole('button', { name: 'Concluir' }).click()
+    await expect(treatmentButton(page, 'Botox')).toHaveAttribute('aria-pressed', 'false')
+    await page.locator('.stage').click({ position: { x: stage.width * 0.5, y: stage.height * 0.3 } })
+    await expect(page.locator('.prow'), 'sem tratamento escolhido, tocar não marca').toHaveCount(2)
+    await expect(summary(page, 'Total de unidades')).toHaveText('5 U')
+
+    await page.keyboard.press('Escape')
+    await expect(backToOverview(page)).toHaveCount(0)
+    await expect(regionRow(page, 'Nariz').locator('b')).toHaveText('5 U')
+    await expect(page.locator('.hotspot')).toHaveCount(1)
     expect(appErrors(errors)).toEqual([])
   })
 })
@@ -680,16 +757,16 @@ test.describe('edição na região ampliada', () => {
     expect(appErrors(errors)).toEqual([])
   })
 
-  test('"Adicionar ponto" e clique na foto criam uma linha sem nome', async ({ page }) => {
+  test('tratamento sobre a imagem e clique na foto criam uma linha sem nome', async ({ page }) => {
     const { errors } = await openWithPhoto(page)
     await openRegion(page, 'Testa')
     await expect(page.locator('.prow')).toHaveCount(5)
 
-    await page.getByRole('button', { name: 'Adicionar ponto' }).click()
+    await treatmentButton(page, 'Preenchimento').click()
     await expect(page.locator('.stage')).toHaveClass(/adding/)
     const stage = await page.locator('.stage').boundingBox()
     const inner = await page.locator('.stage-inner').boundingBox()
-    const position = { x: stage.width * 0.2, y: stage.height * 0.8 }
+    const position = { x: stage.width * 0.2, y: stage.height * 0.62 }
     await page.locator('.stage').click({ position })
 
     await expect(page.locator('.prow')).toHaveCount(6)
@@ -697,7 +774,7 @@ test.describe('edição na região ampliada', () => {
     await expect(page.locator('.pname')).toHaveCount(5)
     await expect(row(page, 5).locator('.pname')).toHaveCount(0)
     await expect(amountInput(page, 5)).toHaveValue('0,2')
-    await expect(page.getByRole('button', { name: 'Adicionar ponto' })).toBeVisible()
+    await expect(treatmentButton(page, 'Preenchimento'), 'a marcação continua armada').toHaveAttribute('aria-pressed', 'true')
     const added = await fractionOf(page.locator('.pt').last())
     expect(added.x).toBeCloseTo((stage.x + position.x - inner.x) / inner.width, 2)
     expect(added.y).toBeCloseTo((stage.y + position.y - inner.y) / inner.height, 2)
@@ -734,9 +811,9 @@ test.describe('salvar e recarregar', () => {
     await openRegion(page, 'Testa')
     await plus(page, 0).click()
     await amountInput(page, 1).fill('0.5')
-    await page.getByRole('button', { name: 'Adicionar ponto' }).click()
+    await treatmentButton(page, 'Preenchimento').click()
     const stage = await page.locator('.stage').boundingBox()
-    await page.locator('.stage').click({ position: { x: stage.width * 0.2, y: stage.height * 0.8 } })
+    await page.locator('.stage').click({ position: { x: stage.width * 0.2, y: stage.height * 0.62 } })
     await expect(page.locator('.prow')).toHaveCount(6)
     await expect(summary(page, 'Total de ml')).toHaveText('0,9 ml')
 
@@ -747,7 +824,7 @@ test.describe('salvar e recarregar', () => {
     await page.reload()
     await expect(page.locator('.hotspot')).toHaveCount(33)
     await expect(summary(page, 'Total de ml')).toHaveText('0,9 ml')
-    await expect(summary(page, 'Número de áreas')).toHaveText('1')
+    await expect(summary(page, 'Número de áreas')).toHaveText('1 área')
     await expect(unsavedNote(page)).toHaveCount(0)
     await expect(page.locator('.sim-layer')).toBeAttached()
     await openRegion(page, 'Testa')
@@ -778,35 +855,34 @@ test.describe('salvar e recarregar', () => {
     await expect(page.locator('.hotspot')).toHaveCount(32)
 
     await page.reload()
-    await expect(page.locator('.region-row')).toHaveCount(19)
+    // Região sem ponto sai da lista: o Mento não volta, e as outras 18 seguem com os pontos salvos.
+    await expect(page.locator('.region-row')).toHaveCount(18)
+    await expect(regionRow(page, 'Mento')).toHaveCount(0)
     await expect(page.locator('.hotspot')).toHaveCount(32)
     expect(appErrors(errors)).toEqual([])
   })
 })
 
 test.describe('plano antigo', () => {
-  test('ganha as regiões novas sem quantidade e sem marcar alteração', async ({ page }) => {
+  test('abre como foi salvo, sem regiões acrescentadas e sem marcar alteração', async ({ page }) => {
     const { errors } = await openWithPlan(page, [
       { region: 'testa', treatment: 'botox', x: 0.44, y: 0.23, amount: 4 },
       { region: 'testa', treatment: 'botox', x: 0.56, y: 0.23, amount: 3 },
     ])
-    await expect(page.locator('.hotspot')).toHaveCount(33)
-    await expect(page.locator('.region-row')).toHaveCount(19)
+    await expect(page.locator('.hotspot')).toHaveCount(1)
+    await expect(page.locator('.region-row')).toHaveCount(1)
     await expect(regionRow(page, 'Testa').locator('b')).toHaveText('7 U')
-    for (const region of REGIONS.filter((r) => r.key !== 'testa')) {
-      await expect.soft(regionRow(page, region.label).locator('b'), region.label).toHaveText('—')
-    }
-    await expect(summary(page, 'Total de unidades')).toHaveText('7 un')
-    await expect(summary(page, 'Número de áreas')).toHaveText('1')
+    await expect(summary(page, 'Total de unidades')).toHaveText('7 U')
+    await expect(summary(page, 'Número de áreas')).toHaveText('1 área')
     await expect(unsavedNote(page)).toHaveCount(0)
 
     await openRegion(page, 'Testa')
     await expect(page.locator('.prow')).toHaveCount(2)
     await expect(amountInput(page, 0)).toHaveValue('4')
     await expect(page.locator('.pname')).toHaveCount(0)
-    await backToOverview(page).click()
-    await openRegion(page, 'Boca (lábios)')
-    await expect(page.locator('.pname')).toHaveCount(8)
+    await page.getByLabel('Ir para região').selectOption({ label: 'Boca (lábios)' })
+    await expect(page.locator('.stage-toolbar strong')).toHaveText('Boca (lábios)')
+    await expect(page.locator('.prow')).toHaveCount(0)
     await expect(unsavedNote(page)).toHaveCount(0)
     expect(appErrors(errors)).toEqual([])
   })
@@ -920,9 +996,13 @@ for (const { width, height } of [
       await page.screenshot({ path: shot(`zoom-periorbital-${width}x${height}.png`), fullPage: true })
       const overflow = await horizontalOverflow(page)
       expect.soft(overflow.scroll, overflow.offenders).toBeLessThanOrEqual(overflow.viewport)
-      for (const name of ['Todas as regiões', 'Lado direito', 'Lado esquerdo', 'Adicionar ponto']) {
+      for (const name of ['Todas as regiões', 'Lado direito', 'Lado esquerdo']) {
         await expect.soft(page.getByRole('button', { name })).toBeInViewport({ ratio: 1 })
       }
+      await expect.soft(treatmentButton(page, 'Botox'), 'tratamentos sobre a imagem, na tela').toBeInViewport({ ratio: 1 })
+      const strip = await page.getByRole('group', { name: 'Tratamento a aplicar' }).boundingBox()
+      const frame = await stageRect(page)
+      expect.soft(strip.x >= frame.left - 0.5 && strip.x + strip.width <= frame.right + 0.5, 'faixa de tratamentos dentro da imagem').toBe(true)
       expect(appErrors(errors)).toEqual([])
     })
   })
@@ -935,7 +1015,7 @@ test.describe('marcar como aplicado', () => {
     const lot = await api.post('/inventory/lots', { product_id: product.id, number: 'L-E2E', expires_on: '2099-12-31', quantity: 10 })
     await page.goto(planningUrl(patient))
     await page.locator('input[type=file]').setInputFiles(await syntheticPhoto(page))
-    await expect(page.locator('.hotspot')).toHaveCount(33)
+    await suggest(page)
 
     await openRegion(page, 'Testa')
     await plus(page, 0).click()
@@ -976,7 +1056,7 @@ test.describe('marcar como aplicado', () => {
     await expect.soft(plus(page, 0), 'botão de aumentar num plano travado').toBeDisabled()
     await expect.soft(amountInput(page, 0), 'campo de quantidade num plano travado').toBeDisabled()
     await expect.soft(page.getByRole('button', { name: 'Remover ponto 1' }), 'remover ponto num plano travado').toBeDisabled()
-    await expect.soft(page.getByRole('button', { name: 'Adicionar ponto' }), 'adicionar ponto num plano travado').toBeDisabled()
+    await expect.soft(page.getByRole('group', { name: 'Tratamento a aplicar' }), 'marcar ponto num plano travado').toHaveCount(0)
     await expect.soft(page.getByRole('button', { name: 'Trocar foto' }), 'trocar foto num plano travado').toBeDisabled()
     const point = page.locator('.pt').first()
     const before = await fractionOf(point)
@@ -992,8 +1072,8 @@ test.describe('lote novo pelo planejamento', () => {
 
   test('toxina sem estoque: produto e lote criados aqui, salvos no plano, baixados ao aplicar e rastreados', async ({ page }) => {
     const { errors, patient } = await openWithPhoto(page)
-    await treatmentButton(page, 'Botox').click()
     await openRegion(page, 'Testa')
+    await treatmentButton(page, 'Botox').click()
     await plus(page, 0).click()
     await page.getByRole('button', { name: 'Novo lote' }).click()
 
@@ -1077,7 +1157,9 @@ test.describe('detecção real', () => {
     test.skip(!portrait, 'sem rede para baixar o retrato de exemplo')
 
     await page.locator('input[type=file]').setInputFiles(portrait)
-    await expect(page.locator('.note').filter({ hasText: 'Pontos ajustados ao rosto' })).toBeVisible({ timeout: 120_000 })
+    await expect(photoImage(page)).toBeVisible()
+    await page.getByRole('button', { name: 'Sugerir pontos' }).click()
+    await expect(page.locator('.note').filter({ hasText: 'Pontos sugeridos ajustados ao rosto' })).toBeVisible({ timeout: 120_000 })
     await expect(page.locator('.hotspot')).toHaveCount(33)
     await expect(page.locator('.region-row')).toHaveCount(19)
     expect(outside(await rectsOf(page, '.hotspot'), await stageRect(page))).toEqual([])
