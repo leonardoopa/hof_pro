@@ -612,17 +612,15 @@ export default function PlanningStep() {
                 Novo plano a partir deste
               </button>
             ) : (
-              <>
-                {plan && (
-                  <button className="btn" onClick={askMarkApplied} disabled={busy || dirty} title={dirty ? 'Salve o plano antes' : undefined}>
-                    <CheckCheck size={16} /> Marcar como aplicado
-                  </button>
-                )}
-                <button className="btn primary" onClick={save} disabled={busy || (!photo && !modelMode)}>
-                  <Save size={16} /> {busy ? 'Salvando…' : 'Salvar plano'}
+              plan && (
+                <button className="btn" onClick={askMarkApplied} disabled={busy || dirty} title={dirty ? 'Salve o plano antes' : undefined}>
+                  <CheckCheck size={16} /> Marcar como aplicado
                 </button>
-              </>
+              )
             )}
+            <button className="btn primary" onClick={save} disabled={busy || (!photo && !modelMode) || applied}>
+              <Save size={16} /> {busy ? 'Salvando…' : 'Salvar plano'}
+            </button>
           </div>
         </header>
 
