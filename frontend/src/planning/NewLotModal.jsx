@@ -4,7 +4,7 @@ import ErrorList from '../components/ErrorList'
 import LotFields, { KINDS } from '../components/LotFields'
 import Modal from '../components/Modal'
 import { parseAmount } from './regions'
-import { UNIT_BY_TREATMENT, fmtDate } from './technique'
+import { UNIT_BY_TREATMENT, clinicToday, fmtDate } from './technique'
 
 const KIND_BY_TREATMENT = { botox: 'toxina', preenchimento: 'preenchedor' } // os demais têm o mesmo nome
 const NEW = 'novo'
@@ -44,7 +44,8 @@ export default function NewLotModal({ treatment, onClose, onSaved }) {
   async function submit(e) {
     e.preventDefault()
     // O plano recusa lote vencido ao salvar; melhor saber agora, antes de o lote entrar no estoque.
-    if (lot.expires_on < new Date().toLocaleDateString('sv-SE')) {
+    // "Hoje" é o da clínica, como no servidor: o relógio do aparelho pode estar noutro fuso.
+    if (lot.expires_on < clinicToday()) {
       return setError(new Error(`Validade ${fmtDate(lot.expires_on)} já passou. Lote vencido não pode ser usado no plano.`))
     }
     setBusy(true)
