@@ -4,7 +4,7 @@ import { api } from '../api/client'
 import ErrorList from '../components/ErrorList'
 import LotFields, { KINDS } from '../components/LotFields'
 import Modal from '../components/Modal'
-import { parseAmount } from '../planning/regions'
+import { formatAmount, parseAmount } from '../planning/regions'
 import { fmtDate } from '../planning/technique'
 
 const kindLabel = (key) => KINDS.find((k) => k.key === key)?.label ?? key
@@ -86,7 +86,7 @@ function ProductModal({ onClose, onSaved }) {
 }
 
 function AdjustModal({ lot, onClose, onSaved }) {
-  const [balance, setBalance] = useState(String(lot.balance))
+  const [balance, setBalance] = useState(String(lot.balance).replace('.', ',')) // vírgula, como o usuário digita
   const [reason, setReason] = useState('')
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -196,7 +196,7 @@ function MovementsRow({ lotId }) {
         {rows?.map((m) => (
           <span key={m.id} className="inv-meta">
             {new Date(m.created_at).toLocaleString('pt-BR')} · {MOVE_LABEL[m.kind] ?? m.kind} {m.delta > 0 ? '+' : ''}
-            {m.delta} → saldo {m.balance_after}
+            {formatAmount(m.delta)} → saldo {formatAmount(m.balance_after)}
             {m.author && ` · ${m.author}`}
             {m.reason && ` · ${m.reason}`}
           </span>
@@ -340,11 +340,11 @@ export default function InventoryPage() {
                             <td>{lot.number}</td>
                             <td>{fmtDate(lot.expires_on)}</td>
                             <td>
-                              {lot.initial_quantity} {lot.unit}
+                              {formatAmount(lot.initial_quantity)} {lot.unit}
                             </td>
                             <td>
                               <b>
-                                {lot.balance} {lot.unit}
+                                {formatAmount(lot.balance)} {lot.unit}
                               </b>
                             </td>
                             <td>
