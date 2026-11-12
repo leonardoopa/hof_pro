@@ -1,4 +1,4 @@
-import { AlertTriangle, Camera, Check, CheckCheck, ChevronLeft, Eye, EyeOff, MousePointerClick, Minus, PackagePlus, Plus, Save, ScanFace, Smile, Sparkles, Trash2, Upload, Wand2 } from 'lucide-react'
+import { AlertTriangle, Camera, Check, CheckCheck, ChevronLeft, Eye, EyeOff, MousePointerClick, Minus, PackagePlus, Pencil, Plus, Save, ScanFace, Smile, Sparkles, Trash2, Upload, Wand2 } from 'lucide-react'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useOutletContext } from 'react-router-dom'
 import { api } from '../api/client'
@@ -7,8 +7,9 @@ import ErrorList from '../components/ErrorList'
 import { useToast } from '../components/Toast'
 import CameraCapture from '../planning/CameraCapture'
 import { detectFace } from '../planning/faceLandmarks'
+import Modal from '../components/Modal'
 import FaceStage from '../planning/FaceStage'
-import { MODEL_FACE } from '../planning/modelFace'
+import { MODEL_FACE, MODEL_TEMPLATE } from '../planning/modelFace'
 import NewLotModal from '../planning/NewLotModal'
 import {
   BILATERAL,
@@ -114,6 +115,7 @@ export default function PlanningStep() {
   const [selected, setSelected] = useState(null)
   const [adding, setAdding] = useState(false)
   const [showMarks, setShowMarks] = useState(true) // false = foto limpa, sem pontos nem rótulos
+  const [notesOpen, setNotesOpen] = useState(false)
 
   // Simulação: liga sozinha quando algum ponto tem quantidade; o botão só sobrepõe essa escolha.
   const [simChoice, setSimChoice] = useState(null) // null = automático
@@ -146,8 +148,11 @@ export default function PlanningStep() {
       setTemplate([])
       return
     }
+    if (image.isModel) {
+      setTemplate(MODEL_TEMPLATE)
+      return
+    }
     setTemplate(fallbackTemplate())
-    if (image.isModel) return
     let alive = true
     getLandmarks(image)
       .then((landmarks) => alive && landmarks && setTemplate(buildTemplate(landmarks, image.naturalWidth, image.naturalHeight)))
@@ -371,11 +376,16 @@ export default function PlanningStep() {
     setSelected(null)
   }
 
-  function addPoint(x, y) {
+  // `key` vem de uma posição sugerida tocada na imagem; toque livre cria ponto sem nome.
+  function addPoint(x, y, key = '') {
     const t = treatmentOf(treatment)
-    const point = withUid({ region: zone.region, side: zone.side, point_key: '', x, y, treatment: t.key, amount: t.initial })
+    const point = withUid({ region: zone.region, side: zone.side, point_key: key, x, y, treatment: t.key, amount: t.initial })
     edit((ps) => [...ps, point])
     setSelected(point.uid)
+    if (key) {
+      setAdding(true) // tocar numa posição sugerida arma o tratamento: os próximos toques seguem marcando
+      setShowMarks(true)
+    }
   }
 
   // O tratamento escolhido sobre a imagem arma a marcação: cada toque coloca um ponto dele. Tocar de novo desarma.
@@ -472,7 +482,7 @@ export default function PlanningStep() {
   async function suggestPoints() {
     setShowMarks(true)
     if (modelMode) {
-      setPoints(fallbackTemplate().map((t) => withUid({ ...t, treatment: 'preenchimento', amount: 0 })))
+      setPoints(MODEL_TEMPLATE.map((t) => withUid({ ...t, treatment: 'preenchimento', amount: 0 })))
       setDetect('idle')
     } else {
       await placeAutomatically(image)
@@ -563,7 +573,7 @@ export default function PlanningStep() {
     const list = lots.filter((l) => l.unit === unit)
     return p.lot_id && !list.some((l) => l.id === p.lot_id) ? [...list, { id: p.lot_id, stale: true }] : list
   }
-  const regionsWithPoints = [...new Set(points.map((p) => p.region))]
+  const pickedLot = (p) => (p.lot_id ? lots.find((l) => l.id === p.lot_id) : null)
   const zonePoints = zone ? points.filter((p) => p.region === zone.region && p.side === zone.side) : []
   const filePicker = (
     <input
@@ -607,6 +617,28 @@ export default function PlanningStep() {
             </span>
           </div>
           <div className="planner-actions">
+            {image && (
+              <select
+                className="input mini region-jump"
+                value=""
+                onChange={(e) => e.target.value && openRegion(e.target.value)}
+                aria-label="Ir para região"
+              >
+                <option value="">Ir para região…</option>
+                {GROUPS.map((group) => (
+                  <optgroup key={group.key} label={group.label}>
+                    {REGIONS.filter((r) => r.group === group.key).map((r) => (
+                      <option key={r.key} value={r.key}>
+                        {r.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            )}
+            <button className="btn" onClick={() => setNotesOpen(true)}>
+              <Pencil size={16} /> Observações{notes.trim() && <i className="has-notes" aria-label="com texto" />}
+            </button>
             {applied ? (
               <button className="btn" onClick={startNewPlan}>
                 Novo plano a partir deste
@@ -652,7 +684,7 @@ export default function PlanningStep() {
         ) : (
           <>
             <div className={`planner ${zone ? 'zoomed' : ''}`}>
-              <div ref={stageWrap} className="planner-stage" style={{ '--aspect': image.naturalWidth / image.naturalHeight }}>
+              <div ref={stageWrap} className={`planner-stage ${compare ? 'has-sim' : ''}`} style={{ '--aspect': image.naturalWidth / image.naturalHeight }}>
                 {zone && (
                   <div className="stage-toolbar">
                     <button className="btn small" onClick={closeRegion}>
@@ -693,10 +725,86 @@ export default function PlanningStep() {
                   onAddPoint={addPoint}
                 />
 
+                <div className="stage-tools" role="toolbar" aria-label="Ferramentas da imagem">
+                  {!modelMode && (
+                    <button
+                      className={`tool ${compare ? 'on' : ''}`}
+                      style={{ '--i': 0 }}
+                      data-label="Simular resultado"
+                      aria-label="Simular resultado"
+                      aria-pressed={compare}
+                      onClick={() => setSimChoice(!compare)}
+                    >
+                      <Sparkles size={18} />
+                    </button>
+                  )}
+                  <button
+                    className={`tool ${showMarks ? '' : 'on'}`}
+                    style={{ '--i': 1 }}
+                    data-label={showMarks ? 'Ocultar pontos' : 'Mostrar pontos'}
+                    aria-label={showMarks ? 'Ocultar pontos' : 'Mostrar pontos'}
+                    aria-pressed={!showMarks}
+                    onClick={toggleMarks}
+                  >
+                    {showMarks ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                  {!applied && !points.length && (
+                    <button className="tool" style={{ '--i': 2 }} data-label="Sugerir pontos" aria-label="Sugerir pontos" onClick={suggestPoints} disabled={busy}>
+                      <Wand2 size={18} />
+                    </button>
+                  )}
+                  {!modelMode && (
+                    <button className="tool" style={{ '--i': 3 }} data-label="Rosto simétrico" aria-label="Rosto simétrico" onClick={chooseModelFace} disabled={busy || applied}>
+                      <Smile size={18} />
+                    </button>
+                  )}
+                  <button
+                    className="tool"
+                    style={{ '--i': 4 }}
+                    data-label={modelMode ? 'Usar foto do paciente' : 'Nova foto'}
+                    aria-label={modelMode ? 'Usar foto do paciente' : 'Nova foto'}
+                    onClick={() => setCamera(true)}
+                    disabled={busy || applied}
+                  >
+                    <Camera size={18} />
+                  </button>
+                  <button
+                    className="tool"
+                    style={{ '--i': 5 }}
+                    data-label={modelMode ? 'Enviar foto' : 'Trocar foto'}
+                    aria-label={modelMode ? 'Enviar foto' : 'Trocar foto'}
+                    onClick={() => fileInput.current.click()}
+                    disabled={busy || applied}
+                  >
+                    <Upload size={18} />
+                  </button>
+                </div>
+
+                {compare && (
+                  <div className="sim-bar">
+                    <label className="split">
+                      <span>Antes</span>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={split}
+                        onChange={(e) => setSplit(Number(e.target.value))}
+                        aria-label="Comparar antes e depois"
+                      />
+                      <span>Depois</span>
+                    </label>
+                    <small>Simulação ilustrativa a partir das quantidades planejadas. Não garante resultado clínico.</small>
+                  </div>
+                )}
+
                 {!zone && showMarks && (
                   <p className="hud-hint hud-top" key="overview">
                     <MousePointerClick size={14} />
-                    {points.length ? 'Toque numa região para ampliar e editar os pontos.' : 'Toque numa região do rosto (por exemplo, o nariz) para começar.'}
+                    {DETECT_NOTE[detect] ??
+                      (points.length
+                        ? 'Toque numa região para ampliar e editar os pontos.'
+                        : `${modelMode ? 'Rosto de referência. ' : ''}Toque numa região do rosto (por exemplo, o nariz) para começar.`)}
                   </p>
                 )}
 
@@ -865,6 +973,8 @@ export default function PlanningStep() {
                                   </button>
                                 )}
                               </div>
+                              {/* O select fechado corta o texto em tela estreita: o lote escolhido aparece inteiro aqui. */}
+                              {pickedLot(p) && <p className="lot-picked">{lotLabel(pickedLot(p))}</p>}
                             </div>
                           )}
                         </Fragment>
@@ -877,110 +987,6 @@ export default function PlanningStep() {
                 </aside>
               )}
             </div>
-
-            <div className="planner-regions">
-              <div className="planner-regions-head">
-                <strong>Regiões do plano</strong>
-                <span className="spacer" />
-                {!applied && !points.length && (
-                  <button type="button" className="btn small" onClick={suggestPoints} disabled={busy}>
-                    <Wand2 size={15} /> Sugerir pontos
-                  </button>
-                )}
-                <select
-                  className="input mini"
-                  value=""
-                  onChange={(e) => e.target.value && openRegion(e.target.value)}
-                  aria-label="Ir para região"
-                >
-                  <option value="">Ir para região…</option>
-                  {GROUPS.map((group) => (
-                    <optgroup key={group.key} label={group.label}>
-                      {REGIONS.filter((r) => r.group === group.key).map((r) => (
-                        <option key={r.key} value={r.key}>
-                          {r.label}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </select>
-              </div>
-              {regionsWithPoints.length ? (
-                <div className="region-list">
-                  {GROUPS.map((group) => {
-                    const inGroup = REGIONS.filter((r) => r.group === group.key && regionsWithPoints.includes(r.key))
-                    if (!inGroup.length) return null
-                    return (
-                      <Fragment key={group.key}>
-                        <span className="region-group">{group.label}</span>
-                        {inGroup.map(({ key, label }) => {
-                          const total = totalsOf(points.filter((p) => p.region === key))
-                          return (
-                            <button
-                              key={key}
-                              type="button"
-                              className={`region-row ${hoverRegion === key ? 'hover' : ''} ${suggested.includes(key) ? 'suggest' : ''} ${zone?.region === key ? 'current' : ''}`}
-                              onClick={() => openRegion(key)}
-                              onMouseEnter={() => setHoverRegion(key)}
-                              onMouseLeave={() => setHoverRegion(null)}
-                            >
-                              <span>{label}</span>
-                              <b className={total.areas ? '' : 'muted'}>{describeTotals(total)}</b>
-                            </button>
-                          )
-                        })}
-                      </Fragment>
-                    )
-                  })}
-                </div>
-              ) : (
-                <p className="note">As regiões entram aqui conforme você marca os pontos.</p>
-              )}
-            </div>
-
-            <div className="stage-foot">
-              {!modelMode && (
-                <button className={`btn small ${compare ? 'primary' : ''}`} onClick={() => setSimChoice(!compare)} aria-pressed={compare}>
-                  <Sparkles size={15} /> Simular resultado
-                </button>
-              )}
-              <button className={`btn small ${showMarks ? '' : 'primary'}`} onClick={toggleMarks} aria-pressed={!showMarks}>
-                {showMarks ? <EyeOff size={15} /> : <Eye size={15} />} {showMarks ? 'Ocultar pontos' : 'Mostrar pontos'}
-              </button>
-              {compare && (
-                <label className="split">
-                  <span>Antes</span>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={split}
-                    onChange={(e) => setSplit(Number(e.target.value))}
-                    aria-label="Comparar antes e depois"
-                  />
-                  <span>Depois</span>
-                </label>
-              )}
-              <span className="spacer" />
-              {!modelMode && (
-                <button className="btn ghost small" onClick={chooseModelFace} disabled={busy || applied}>
-                  <Smile size={15} /> Rosto simétrico
-                </button>
-              )}
-              <button className="btn ghost small" onClick={() => setCamera(true)} disabled={busy || applied}>
-                <Camera size={15} /> {modelMode ? 'Usar foto do paciente' : 'Nova foto'}
-              </button>
-              <button className="btn ghost small" onClick={() => fileInput.current.click()} disabled={busy || applied}>
-                <Upload size={15} /> {modelMode ? 'Enviar foto' : 'Trocar foto'}
-              </button>
-            </div>
-            {modelMode && <p className="note">Rosto simétrico de referência: o plano não usa foto. Os pontos valem para este desenho.</p>}
-            {DETECT_NOTE[detect] && <p className="note">{DETECT_NOTE[detect]}</p>}
-            {compare && (
-              <p className="note">
-                Simulação ilustrativa (atualiza a cada alteração de quantidade) feita a partir das quantidades planejadas. Não representa garantia de resultado clínico.
-              </p>
-            )}
           </>
         )}
         {filePicker}
@@ -988,20 +994,26 @@ export default function PlanningStep() {
 
       {image && !modelMode && <SymmetryPanel image={image} getLandmarks={getLandmarks} suggested={suggested} onSuggest={setSuggested} />}
 
-      <section className="card">
-        <div className="card-title">Observações</div>
-        <textarea
-          className="input"
-          disabled={applied}
-          placeholder="Ex.: assimetria leve em malar direito. Paciente relata bruxismo."
-          value={notes}
-          onChange={(e) => {
-            setNotes(e.target.value)
-            setDirty(true)
-          }}
-        />
-      </section>
-
+      {notesOpen && (
+        <Modal title="Observações" onClose={() => setNotesOpen(false)}>
+          <textarea
+            className="input"
+            autoFocus
+            disabled={applied}
+            placeholder="Ex.: assimetria leve em malar direito. Paciente relata bruxismo."
+            value={notes}
+            onChange={(e) => {
+              setNotes(e.target.value)
+              setDirty(true)
+            }}
+          />
+          <div className="modal-actions">
+            <button className="btn primary" onClick={() => setNotesOpen(false)}>
+              Fechar
+            </button>
+          </div>
+        </Modal>
+      )}
       {camera && <CameraCapture onCapture={addPhoto} onClose={() => setCamera(false)} />}
       {confirm && <ConfirmModal {...confirm} onClose={() => setConfirm(null)} />}
       {lotFor && (

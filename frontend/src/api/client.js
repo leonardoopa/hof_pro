@@ -131,6 +131,7 @@ export const api = {
     lots: ({ available = false } = {}) => data(`/inventory/lots?available=${available}`),
     createLot: (body) => data('/inventory/lots', { method: 'POST', json: body }),
     updateLot: (id, body) => data(`/inventory/lots/${id}`, { method: 'PATCH', json: body }),
+    movements: (lotId) => data(`/inventory/lots/${lotId}/movements`),
     alerts: () => data('/inventory/alerts'),
     traceability: (patientId) => data(`/patients/${patientId}/traceability`),
   },

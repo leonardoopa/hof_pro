@@ -110,6 +110,11 @@ export default function FaceStage({
   // Pontos desenhados sobre a foto. Ocultos, sobra só a foto (ou a simulação); o zoom continua seguindo os pontos.
   const marks = showMarks ? points : []
   const zonePoints = zone ? marks.filter((p) => inZone(p, zone)) : []
+  // Região aberta: as posições sugeridas que ainda não viraram ponto aparecem como alvos; tocar num deles coloca o ponto nomeado ali.
+  const ghosts =
+    zone && showMarks && !readOnly
+      ? template.filter((t) => inZone(t, zone) && !zonePoints.some((p) => p.point_key === t.point_key))
+      : []
 
   // Visão geral: um hotspot por região e lado, afastados para não se sobreporem; rótulo fixo só onde cabe.
   const groups = zone
@@ -224,6 +229,25 @@ export default function FaceStage({
                 style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%`, '--c': treatmentOf(p.treatment).color }}
               />
             ))}
+
+        {ghosts.map((g) => {
+          const name = pointLabel(g.region, g.point_key)
+          return (
+            <button
+              key={`ghost-${g.point_key}`}
+              type="button"
+              className="ghost"
+              style={{ left: `${g.x * 100}%`, top: `${g.y * 100}%` }}
+              aria-label={`${regionLabel(g.region)}, ${name || g.point_key}: marcar ponto sugerido`}
+              onClick={(e) => {
+                e.stopPropagation() // não cai no toque livre do palco
+                onAddPoint(g.x, g.y, g.point_key)
+              }}
+            >
+              {name && <span className="ghost-name">{name}</span>}
+            </button>
+          )
+        })}
 
         {zonePoints.map((p, index) => (
           <button

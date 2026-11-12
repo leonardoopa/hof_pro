@@ -66,7 +66,7 @@
   }
 }
 .planner-stage {
-  --stage-h: clamp(440px, calc(100vh - 96px), 980px);
+  --stage-h: clamp(480px, calc(100vh - 64px), 1100px);
   position: relative;
   scroll-margin: var(--space-4);
   width: min(100%, calc(var(--stage-h) * var(--aspect)));
@@ -206,6 +206,7 @@
   width: 100%;
   height: 100%;
   pointer-events: none;
+  animation: hud-fade 0.6s var(--ease) both;
 }
 
 /* hotspots (visão geral): a área de toque é o botão inteiro; o círculo desenhado é o ::before */
@@ -391,16 +392,6 @@
   box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
   transform: translateX(-50%) scaleX(calc(1 / var(--s)));
   pointer-events: none;
-}
-.stage-foot {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-  margin-top: var(--space-3);
-}
-.stage-foot .spacer {
-  flex: 1;
 }
 .split {
   display: inline-flex;
@@ -882,7 +873,7 @@
 }
 @media (min-width: 1101px) {
   .zone-panel {
-    max-height: clamp(440px, calc(100vh - 96px), 980px);
+    max-height: clamp(480px, calc(100vh - 64px), 1100px);
     overflow-y: auto;
     padding-right: 4px;
   }
@@ -891,53 +882,6 @@
   .zone-panel {
     animation-name: panel-up;
   }
-}
-
-/* regiões do plano, em fichas abaixo do rosto */
-.planner-regions {
-  margin-top: var(--space-4);
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--line);
-}
-.planner-regions-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-  margin-bottom: var(--space-3);
-}
-.planner-regions-head .spacer {
-  flex: 1;
-}
-.planner-regions-head select {
-  width: auto;
-  min-width: 170px;
-}
-.planner-regions .region-list {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-.planner-regions .region-group {
-  flex-basis: 100%;
-  padding: var(--space-2) 2px 0;
-}
-.planner-regions .region-group:first-child {
-  padding-top: 0;
-}
-.planner-regions .region-row {
-  display: inline-flex;
-  gap: var(--space-2);
-  padding: 6px 13px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-pill);
-  background: var(--surface);
-  animation: pop-in 0.3s var(--ease) both;
-}
-.planner-regions .region-row.current {
-  border-color: var(--primary);
-  background: var(--primary-soft);
 }
 
 @keyframes hud-fade {
@@ -1037,5 +981,224 @@
   .hud-hint.hud-top {
     white-space: normal;
     text-align: center;
+  }
+}
+
+/* ---------- ferramentas sobre a imagem (no lugar da faixa que ficava abaixo do rosto) ---------- */
+.stage-tools {
+  position: absolute;
+  top: 50%;
+  right: var(--space-3);
+  z-index: 7;
+  display: grid;
+  gap: var(--space-2);
+  transform: translateY(-50%);
+}
+.tool {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--glass);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-sm);
+  color: var(--text);
+  animation: chip-in 0.4s var(--ease) both;
+  animation-delay: calc(var(--i) * 60ms);
+  transition: transform var(--dur), background-color var(--dur), color var(--dur);
+}
+.tool:hover:not(:disabled) {
+  transform: scale(1.1);
+  color: var(--primary-strong);
+}
+.tool.on {
+  background: var(--primary);
+  color: #fff;
+}
+.tool:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.tool::after {
+  content: attr(data-label);
+  position: absolute;
+  top: 50%;
+  right: calc(100% + 10px);
+  padding: 4px 10px;
+  border-radius: var(--radius-xs);
+  background: var(--text);
+  color: var(--surface);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(6px, -50%);
+  transition: opacity var(--dur), transform var(--dur);
+}
+.tool:hover::after,
+.tool:focus-visible::after {
+  opacity: 1;
+  transform: translate(0, -50%);
+}
+
+/* comparação antes/depois, num canto da imagem */
+.sim-bar {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  z-index: 7;
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+  max-width: 270px;
+  padding: 7px 12px;
+  border-radius: 16px;
+  background: var(--glass);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-sm);
+  animation: hud-down 0.35s var(--ease) both;
+}
+.sim-bar small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.25;
+  text-align: right;
+}
+.sim-bar .split input {
+  width: 120px;
+}
+.planner-stage.has-sim .stage-toolbar,
+.planner-stage.has-sim .hud-hint.hud-top {
+  right: 290px;
+}
+.planner-stage.has-sim .hud-hint.hud-top {
+  white-space: normal;
+}
+
+/* posições sugeridas da região aberta: alvos para marcar o ponto já com o nome anatômico */
+.ghost {
+  position: absolute;
+  z-index: 3;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+  transform: translate(-50%, -50%) scale(calc(1 / var(--s)));
+  animation: ghost-in 0.5s var(--ease) both;
+}
+.ghost::before {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  border: 2px dashed #fff;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--primary) 32%, transparent);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35), 0 0 0 0 color-mix(in srgb, var(--primary) 55%, transparent);
+  animation: ghost-pulse 2.2s ease-out infinite;
+  transition: inset var(--dur), background-color var(--dur);
+}
+.ghost:hover::before,
+.ghost:focus-visible::before {
+  inset: 3px;
+  border-style: solid;
+  background: color-mix(in srgb, var(--primary) 75%, transparent);
+  animation: none;
+}
+.ghost-name {
+  position: absolute;
+  top: calc(100% - 2px);
+  left: 50%;
+  padding: 2px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%);
+  transition: opacity var(--dur);
+}
+.ghost:hover,
+.ghost:focus-visible {
+  z-index: 5;
+}
+.ghost:hover .ghost-name,
+.ghost:focus-visible .ghost-name {
+  opacity: 1;
+}
+/* ponto marcado solta um anel que se abre uma vez */
+.pt.on::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border: 2px solid var(--c);
+  border-radius: 50%;
+  pointer-events: none;
+  animation: ripple 0.7s ease-out both;
+}
+@keyframes ghost-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(calc(0.4 / var(--s)));
+  }
+}
+@keyframes ghost-pulse {
+  to {
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35), 0 0 0 9px color-mix(in srgb, var(--primary) 0%, transparent);
+  }
+}
+@keyframes ripple {
+  from {
+    opacity: 0.8;
+  }
+  to {
+    opacity: 0;
+    transform: scale(2.3);
+  }
+}
+
+.region-jump {
+  width: auto;
+  min-width: 160px;
+}
+.has-notes {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-left: 4px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+
+@media (max-width: 560px) {
+  .tool {
+    width: 38px;
+    height: 38px;
+  }
+  .tool::after {
+    display: none;
+  }
+  .sim-bar {
+    top: 64px;
+  }
+  .planner-stage.has-sim .stage-toolbar,
+  .planner-stage.has-sim .hud-hint.hud-top {
+    right: var(--space-2);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ghost::before,
+  .pt.on::after {
+    animation: none;
   }
 }
