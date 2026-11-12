@@ -1135,7 +1135,9 @@ test.describe('lote novo pelo planejamento', () => {
     await dialog.getByLabel('Número do lote').fill('AH-02')
     await saveLot.click()
     await expect(dialog).toHaveCount(0)
-    await expect(chosenLot(page)).toHaveText('Marca ML Ácido hialurônico · lote AH-02 · val. 31/12/2099 · 2.5 ml')
+    await expect(chosenLot(page)).toHaveText('Marca ML Ácido hialurônico · lote AH-02 · val. 31/12/2099 · 2,5 ml')
+    // O select fechado corta o texto em tela estreita; o lote escolhido aparece inteiro logo abaixo.
+    await expect(page.locator('.lot-picked')).toHaveText('Marca ML Ácido hialurônico · lote AH-02 · val. 31/12/2099 · 2,5 ml')
     await expect(unsavedNote(page)).toBeVisible()
 
     expect(await api.get('/inventory/products')).toHaveLength(2)

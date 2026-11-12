@@ -204,3 +204,22 @@ def test_plan_photo_must_belong_to_patient(client, auth, patient):
     ).json()
     r = client.post(f"/api/patients/{patient['id']}/plans", json={"photo_id": photo["id"], "points": []}, headers=auth)
     assert r.status_code == 422
+
+
+def test_plan_refuses_a_label_photo(client, auth, patient):
+    # A etiqueta da caixa do produto fica com o paciente, mas não é foto do rosto: não serve de base para o plano.
+    label = client.post(
+        f"/api/patients/{patient['id']}/photos",
+        files={"file": ("etiqueta.png", png_bytes(), "image/png")},
+        data={"kind": "etiqueta"},
+        headers=auth,
+    ).json()
+    url = f"/api/patients/{patient['id']}/plans"
+    refused = client.post(url, json={"photo_id": label["id"], "points": []}, headers=auth)
+    assert refused.status_code == 422
+    assert "etiqueta" in refused.json()["detail"]
+
+    plan = client.post(url, json={"points": []}, headers=auth).json()
+    changed = client.put(f"/api/plans/{plan['id']}", json={"photo_id": label["id"], "points": []}, headers=auth)
+    assert changed.status_code == 422
+    assert client.get(f"/api/plans/{plan['id']}", headers=auth).json()["photo_id"] is None

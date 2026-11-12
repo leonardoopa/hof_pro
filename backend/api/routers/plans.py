@@ -39,8 +39,15 @@ def _own_plan(user: User, plan_id: int) -> FacialPlan:
 
 
 def _check_photo(patient, photo_id):
-    if photo_id is not None and not PatientPhoto.objects.filter(pk=photo_id, patient=patient).exists():
+    if photo_id is None:
+        return
+    kind = PatientPhoto.objects.filter(pk=photo_id, patient=patient).values_list("kind", flat=True).first()
+    if kind is None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Foto não pertence a este paciente.")
+    if kind == PatientPhoto.Kind.LABEL:  # a etiqueta da caixa do produto não é foto do rosto
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "A foto da etiqueta não serve de base para o plano: use uma foto do rosto."
+        )
 
 
 def _check_not_hidden(patient) -> None:
