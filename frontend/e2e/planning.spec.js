@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import { REGIONS } from '../src/planning/regions.js'
+import { MODEL_TEMPLATE } from '../src/planning/modelFace.js'
 import { fallbackTemplate } from '../src/planning/template.js'
 import { blockFaceDetection, collectPageErrors, createPatient, samplePortrait, signIn, syntheticPhoto } from './helpers.js'
 
@@ -85,7 +86,9 @@ const planWithAmountsIn = (...regions) =>
     amount: regions.includes(region) ? 0.5 : 0,
   }))
 
-const regionRow = (page, label) => page.locator('.region-row').filter({ has: page.getByText(label, { exact: true }) })
+// Hotspot de uma região na visão geral; o nome acessível traz o total dela ("Testa: 7 U. Abrir região").
+const regionSpot = (page, label, total) => page.getByRole('button', { name: `${label}: ${total}. Abrir região` })
+const regionJump = (page) => page.getByLabel('Ir para região')
 // Totais do cabeçalho; o título diz qual é qual.
 const summary = (page, label) => page.getByTitle(new RegExp(`^${label}`))
 const treatmentButton = (page, name) =>
@@ -104,7 +107,7 @@ const settled = (page) =>
   page.evaluate(() => Promise.all(document.querySelector('.stage-inner').getAnimations().map((a) => a.finished.catch(() => {}))))
 
 async function openRegion(page, label) {
-  await regionRow(page, label).click()
+  await regionJump(page).selectOption({ label })
   await expect(page.locator('.stage-toolbar strong')).toHaveText(label)
   await settled(page)
 }
@@ -200,9 +203,9 @@ async function dragBy(page, target, dx, dy) {
 test.describe('envio da foto', () => {
   test('sem detecção, avisa e mostra 19 regiões em 4 grupos e 33 hotspots', async ({ page }) => {
     const { errors } = await openWithPhoto(page)
-    await expect(page.locator('.note').filter({ hasText: 'Detecção indisponível' })).toBeVisible()
-    await expect(page.locator('.region-row')).toHaveCount(19)
-    await expect(page.locator('.region-group')).toHaveCount(4)
+    await expect(page.locator('.hud-hint').filter({ hasText: 'Detecção indisponível' })).toBeVisible()
+    await expect(regionJump(page).locator('option:not([value=""])')).toHaveCount(19)
+    await expect(regionJump(page).locator('optgroup')).toHaveCount(4)
     await expect(page.locator('.hotspot')).toHaveCount(33)
     await expect(photoImage(page)).toBeVisible()
     await expect(unsavedNote(page)).toBeVisible()
@@ -246,7 +249,6 @@ test.describe('zoom de região', () => {
 
         await backToOverview(page).click()
         await expect(page.locator('.hotspot')).toHaveCount(33)
-        await expect(page.locator('.region-row')).toHaveCount(19)
       })
     }
     expect(appErrors(errors)).toEqual([])
@@ -319,7 +321,7 @@ test.describe('quantidade e simulação ao vivo', () => {
     await expect(amountInput(page, 1)).toHaveValue('2')
 
     await backToOverview(page).click()
-    await expect(regionRow(page, 'Testa').locator('b')).toHaveText('2 U · 1 ml')
+    await expect(regionSpot(page, 'Testa', '2 U · 1 ml')).toBeVisible()
     await openRegion(page, 'Nariz')
     await treatmentButton(page, 'Preenchimento').click()
     await plus(page, 0).click()
@@ -585,7 +587,8 @@ test.describe('quantidade e simulação ao vivo', () => {
 
 /** Centro de uma região no rosto de referência: a média das posições sugeridas dela. */
 function centerOf(region, side = 'C') {
-  const pts = fallbackTemplate().filter((p) => p.region === region && p.side === side)
+  // Posições do rosto de referência (os testes que usam centerOf abrem esse rosto).
+  const pts = MODEL_TEMPLATE.filter((p) => p.region === region && p.side === side)
   return { x: pts.reduce((sum, p) => sum + p.x, 0) / pts.length, y: pts.reduce((sum, p) => sum + p.y, 0) / pts.length }
 }
 
@@ -601,7 +604,6 @@ test.describe('o rosto é o alvo', () => {
   test('com o plano vazio, o cursor mostra a região e o toque abre e amplia a mais próxima', async ({ page }) => {
     const { errors } = await openModelFace(page)
     await expect(page.locator('.hotspot')).toHaveCount(0)
-    await expect(page.locator('.region-row')).toHaveCount(0)
     const stage = await page.locator('.stage').boundingBox()
     const at = ({ x, y }) => ({ x: stage.width * x, y: stage.height * y })
 
@@ -615,7 +617,6 @@ test.describe('o rosto é o alvo', () => {
     const scale = await page.locator('.stage-inner').evaluate((el) => Number(el.style.getPropertyValue('--s')))
     expect(scale, 'a região vazia também amplia').toBeGreaterThan(1.5)
     await expect(page.getByText('Nenhum ponto nesta região')).toBeVisible()
-    await expect(page.locator('.region-row'), 'região sem ponto não entra na lista').toHaveCount(0)
     expect(appErrors(errors)).toEqual([])
   })
 
@@ -646,8 +647,31 @@ test.describe('o rosto é o alvo', () => {
 
     await page.keyboard.press('Escape')
     await expect(backToOverview(page)).toHaveCount(0)
-    await expect(regionRow(page, 'Nariz').locator('b')).toHaveText('5 U')
+    await expect(regionSpot(page, 'Nariz', '5 U')).toBeVisible()
     await expect(page.locator('.hotspot')).toHaveCount(1)
+    expect(appErrors(errors)).toEqual([])
+  })
+})
+
+test.describe('posições sugeridas na região aberta', () => {
+  test('com tratamento escolhido, tocar na posição marca o ponto com nome; sem tratamento, não marca', async ({ page }) => {
+    const { errors } = await openModelFace(page)
+    await page.getByLabel('Ir para região').selectOption({ label: 'Nariz' })
+    await settled(page)
+    const spots = page.locator('.spot')
+    await expect(spots).toHaveCount(6)
+
+    // A dose inicial depende do produto: sem tratamento escolhido, o toque só chama a atenção para a escolha.
+    await spots.first().click()
+    await expect(page.locator('.prow')).toHaveCount(0)
+    await expect(page.locator('.hud-hint.nudge')).toBeVisible()
+
+    await treatmentButton(page, 'Preenchimento').click()
+    await spots.first().click()
+    await expect(page.locator('.prow')).toHaveCount(1)
+    await expect(page.locator('.prow .pname'), 'ponto vindo de posição sugerida tem nome anatômico').toHaveCount(1)
+    await expect(amountInput(page, 0)).toHaveValue('0,2')
+    await expect(spots, 'a posição usada deixa de ser alvo').toHaveCount(5)
     expect(appErrors(errors)).toEqual([])
   })
 })
@@ -855,9 +879,8 @@ test.describe('salvar e recarregar', () => {
     await expect(page.locator('.hotspot')).toHaveCount(32)
 
     await page.reload()
-    // Região sem ponto sai da lista: o Mento não volta, e as outras 18 seguem com os pontos salvos.
-    await expect(page.locator('.region-row')).toHaveCount(18)
-    await expect(regionRow(page, 'Mento')).toHaveCount(0)
+    // Região sem ponto não tem hotspot: o Mento não volta, e as outras 18 seguem com os pontos salvos.
+    await expect(page.locator('.hotspot[aria-label^="Mento"]')).toHaveCount(0)
     await expect(page.locator('.hotspot')).toHaveCount(32)
     expect(appErrors(errors)).toEqual([])
   })
@@ -870,8 +893,7 @@ test.describe('plano antigo', () => {
       { region: 'testa', treatment: 'botox', x: 0.56, y: 0.23, amount: 3 },
     ])
     await expect(page.locator('.hotspot')).toHaveCount(1)
-    await expect(page.locator('.region-row')).toHaveCount(1)
-    await expect(regionRow(page, 'Testa').locator('b')).toHaveText('7 U')
+    await expect(regionSpot(page, 'Testa', '7 U')).toBeVisible()
     await expect(summary(page, 'Total de unidades')).toHaveText('7 U')
     await expect(summary(page, 'Número de áreas')).toHaveText('1 área')
     await expect(unsavedNote(page)).toHaveCount(0)
@@ -1161,9 +1183,8 @@ test.describe('detecção real', () => {
     await page.locator('input[type=file]').setInputFiles(portrait)
     await expect(photoImage(page)).toBeVisible()
     await page.getByRole('button', { name: 'Sugerir pontos' }).click()
-    await expect(page.locator('.note').filter({ hasText: 'Pontos sugeridos ajustados ao rosto' })).toBeVisible({ timeout: 120_000 })
+    await expect(page.locator('.hud-hint').filter({ hasText: 'Pontos sugeridos ajustados ao rosto' })).toBeVisible({ timeout: 120_000 })
     await expect(page.locator('.hotspot')).toHaveCount(33)
-    await expect(page.locator('.region-row')).toHaveCount(19)
     expect(outside(await rectsOf(page, '.hotspot'), await stageRect(page))).toEqual([])
 
     await page.getByRole('button', { name: 'Simetria' }).click()

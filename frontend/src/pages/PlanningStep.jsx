@@ -116,6 +116,7 @@ export default function PlanningStep() {
   const [adding, setAdding] = useState(false)
   const [showMarks, setShowMarks] = useState(true) // false = foto limpa, sem pontos nem rótulos
   const [notesOpen, setNotesOpen] = useState(false)
+  const [nudge, setNudge] = useState(0) // conta os toques numa posição sugerida sem tratamento escolhido
 
   // Simulação: liga sozinha quando algum ponto tem quantidade; o botão só sobrepõe essa escolha.
   const [simChoice, setSimChoice] = useState(null) // null = automático
@@ -382,10 +383,6 @@ export default function PlanningStep() {
     const point = withUid({ region: zone.region, side: zone.side, point_key: key, x, y, treatment: t.key, amount: t.initial })
     edit((ps) => [...ps, point])
     setSelected(point.uid)
-    if (key) {
-      setAdding(true) // tocar numa posição sugerida arma o tratamento: os próximos toques seguem marcando
-      setShowMarks(true)
-    }
   }
 
   // O tratamento escolhido sobre a imagem arma a marcação: cada toque coloca um ponto dele. Tocar de novo desarma.
@@ -400,6 +397,7 @@ export default function PlanningStep() {
     const sides = BILATERAL.has(region) ? ['D', 'E'] : ['C']
     const target = side ?? sides[0]
     setZone({ region, side: target })
+    setNudge(0)
     setAdding(false)
     setSelected(points.find((p) => p.region === region && p.side === target)?.uid ?? null)
   }
@@ -723,6 +721,7 @@ export default function PlanningStep() {
                   onSelectPoint={setSelected}
                   onMovePoint={movePoint}
                   onAddPoint={addPoint}
+                  onIdleTap={() => setNudge((n) => n + 1)}
                 />
 
                 <div className="stage-tools" role="toolbar" aria-label="Ferramentas da imagem">
@@ -847,7 +846,7 @@ export default function PlanningStep() {
                         </button>
                       ))}
                     </div>
-                    <p className="hud-hint">
+                    <p className={`hud-hint ${nudge && !adding ? 'nudge' : ''}`} key={`hint-${adding ? 'on' : nudge}`}>
                       {adding ? (
                         <>
                           Toque na imagem para marcar cada ponto de {treatmentOf(treatment).label}.
