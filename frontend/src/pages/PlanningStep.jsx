@@ -519,10 +519,30 @@ export default function PlanningStep() {
     }
   }
 
-  function askMarkApplied() {
+  // Antes da baixa, os avisos de segurança (termo, intervalo de toxina, zona de risco, lote...). Avisam, não bloqueiam.
+  async function askMarkApplied() {
+    let items = []
+    try {
+      items = (await api.plans.applyCheck(plan.id)).items
+    } catch {
+      items = [{ code: 'falha', level: 'info', message: 'Não foi possível checar os avisos agora.' }]
+    }
     setConfirm({
       title: 'Marcar como aplicado',
-      message: 'Marcar como aplicado dá baixa no saldo dos lotes informados e trava a edição deste plano. Continuar?',
+      message: (
+        <>
+          {items.length > 0 && (
+            <span className="apply-check" role="list" aria-label="Avisos antes de aplicar">
+              {items.map((i) => (
+                <span key={i.code} role="listitem" className={`apply-check-item ${i.level}`}>
+                  <AlertTriangle size={14} /> {i.message}
+                </span>
+              ))}
+            </span>
+          )}
+          Marcar como aplicado dá baixa no saldo dos lotes informados e trava a edição deste plano. Continuar?
+        </>
+      ),
       confirmLabel: 'Marcar como aplicado',
       onConfirm: markApplied,
     })

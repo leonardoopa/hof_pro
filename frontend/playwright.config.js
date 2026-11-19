@@ -3,8 +3,11 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { defineConfig, devices } from '@playwright/test'
 
-const BACKEND = 'http://127.0.0.1:8001'
-const FRONTEND = 'http://localhost:5174'
+// Portas próprias da suíte; troque por E2E_BACKEND_PORT / E2E_FRONTEND_PORT se outro serviço já usa estas.
+const BACKEND_PORT = process.env.E2E_BACKEND_PORT ?? '8001'
+const FRONTEND_PORT = process.env.E2E_FRONTEND_PORT ?? '5174'
+const BACKEND = `http://127.0.0.1:${BACKEND_PORT}`
+const FRONTEND = `http://localhost:${FRONTEND_PORT}`
 
 // Banco e fotos descartáveis, fora do repositório. Os processos filhos herdam o mesmo diretório.
 process.env.E2E_DATA_DIR ??= mkdtempSync(join(tmpdir(), 'hofpro-e2e-'))
@@ -33,7 +36,7 @@ export default defineConfig({
   // reuseExistingServer: false faz a suíte falhar se a porta estiver ocupada, em vez de usar um servidor de desenvolvimento.
   webServer: [
     {
-      command: `${python} manage.py migrate --noinput && ${python} -m uvicorn config.asgi:application --port 8001`,
+      command: `${python} manage.py migrate --noinput && ${python} -m uvicorn config.asgi:application --port ${BACKEND_PORT}`,
       cwd: backendDir,
       env: { DJANGO_SETTINGS_MODULE: 'config.settings_e2e', E2E_DATA_DIR: process.env.E2E_DATA_DIR },
       url: `${BACKEND}/docs`,
@@ -41,7 +44,7 @@ export default defineConfig({
       timeout: 60_000,
     },
     {
-      command: 'npx vite --port 5174 --strictPort',
+      command: `npx vite --port ${FRONTEND_PORT} --strictPort`,
       env: { API_PROXY_TARGET: BACKEND },
       url: FRONTEND,
       reuseExistingServer: false,

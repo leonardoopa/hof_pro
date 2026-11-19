@@ -60,7 +60,7 @@ Testes:
 
 - Backend (SQLite, não precisa de SQL Server): `cd backend && ../.venv/bin/python -m pytest`
 - Front, funções puras (pontos, simetria, layout): `cd frontend && npm test`
-- Front no navegador (Playwright): `cd frontend && npx playwright install --only-shell chromium && npm run test:e2e`. A suíte sobe o próprio backend (porta 8001) e o próprio frontend (porta 5174), com banco e fotos descartáveis, e falha se as portas estiverem ocupadas. O teste com detecção real precisa de internet: baixa o runtime e o modelo do MediaPipe e um retrato de exemplo, que fica fora do repositório.
+- Front no navegador (Playwright): `cd frontend && npx playwright install --only-shell chromium && npm run test:e2e`. A suíte sobe o próprio backend (porta 8001) e o próprio frontend (porta 5174), com banco e fotos descartáveis, e falha se as portas estiverem ocupadas; troque com `E2E_BACKEND_PORT` e `E2E_FRONTEND_PORT`. O teste com detecção real precisa de internet: baixa o runtime e o modelo do MediaPipe e um retrato de exemplo, que fica fora do repositório.
 
 ## O que existe
 
@@ -87,6 +87,9 @@ Testes:
 - **Design system** (`styles/tokens.css`) com tema claro/escuro e alternador.
 - **Relatório mensal** (`GET /api/reports/monthly?month=AAAA-MM`): pacientes atendidos no mês (com novos cadastros e nº de aplicações), produtos e lotes usados (total em U/ml, validade e saldo atual), exportação CSV. Pacientes com dados ocultos ficam de fora.
 - **Agenda** (app `scheduling`, `/api/appointments`): visão semanal, agendamento de paciente cadastrado ou de novo paciente (nome/telefone), status (agendado, confirmado, realizado, cancelado, faltou), conflito de horário (409) e conversão do lead em paciente. Auditado.
+- **Intercorrências** (app `safety`, aba "Intercorrências" do paciente): registro de evento adverso (oclusão vascular, nódulo, edema, hematoma, ptose, infecção, alergia, assimetria) ligado à aplicação, que traz região, ponto e lote. O botão "Suspeita de oclusão vascular" abre o protocolo na tela: cronômetro desde o início, passos sem dose, checklist de sinais (alteração visual, dor ocular ou sinal neurológico vira aviso de emergência) e as referências (Cohen et al., Aesthet Surg J 2015; guia CMAC, JCAD 2021; força-tarefa ASDS). A hialuronidase usada sai do saldo do lote, como numa aplicação. Desfecho, data e número da notificação à Anvisa ficam no registro, e "Copiar resumo para o Notivisa" gera o texto para colar no formulário. O sistema não envia nada à Anvisa.
+- **Recall por lote** (`GET /api/inventory/lots/{id}/patients`, botão com ícone de pessoas no Estoque): quem recebeu o lote, com data, região e contato, para alerta da Anvisa ou recolhimento do fabricante. Paciente com dados ocultos aparece como tal. A consulta é auditada.
+- **Checagem antes de "Marcar como aplicado"** (`GET /api/plans/{id}/apply-check`): avisa, sem bloquear, anamnese não preenchida, termo do tratamento não assinado, toxina aplicada há menos de `TOXIN_MIN_INTERVAL_DAYS` dias (padrão 84, com o total de unidades no período), preenchedor em zona de maior risco vascular (nariz, glabela, testa, nasolabial, malar), ponto sem lote e intercorrência em acompanhamento.
 - Financeiro aparece como "Em breve".
 
 ## Decisões e limites
@@ -99,6 +102,7 @@ Testes:
 - A simulação é um efeito de imagem no navegador, não um modelo de IA. A IA que simula o tratamento (anotada no esboço) é a próxima etapa e exige um modelo generativo e revisão clínica.
 - Fotos de pacientes são dados sensíveis (LGPD). Ficam em `backend/media`, sem rota pública, e só saem por `/api/photos/{id}/file` com token. O upload é regravado como JPEG, o que remove EXIF/GPS.
 - O MediaPipe roda localmente: a foto não vai para nenhum serviço. Só o runtime WASM (jsDelivr) e o modelo (Google Storage) são baixados; para produção ou uso offline, hospede os dois (`frontend/src/planning/faceLandmarks.js`).
+- O intervalo de toxina (84 dias) vem de literatura de uso terapêutico; para estética não achamos consenso brasileiro. É aviso, não bloqueio, e a clínica ajusta em `TOXIN_MIN_INTERVAL_DAYS`. O protocolo de oclusão não mostra dose de hialuronidase pelo mesmo motivo das doses de referência: falta validação por profissional.
 - Sem refresh token ainda. O limite de tentativas de login fica em memória: com vários processos, precisa de armazenamento compartilhado.
 
 ## Decisões da agenda e do relatório mensal
@@ -115,3 +119,5 @@ Testes:
 1. Agenda: lembretes por WhatsApp/e-mail, recorrência, bloqueio de horários e visão diária no celular.
 2. Financeiro (orçamentos e recebimentos) e histórico por paciente.
 3. Simulação por IA a partir do planejamento.
+4. Da pesquisa de 2026-11 (ainda não feito): retorno de 15 dias e retoque de toxina ligado à sessão original; kit de emergência com conferência mensal no estoque; copiar sessão anterior e modelos de plano; prontuário completo exportável em PDF; anamnese preenchida pelo paciente com confirmação da profissional.
+5. Público: no início o produto é só para cirurgiões-dentistas (decisão do responsável, 2026-11-19); o cadastro pede o registro no CRO. Risco a acompanhar: o TRF-1 anulou a Resolução CFO 198/2019 (HOF como especialidade do dentista) em 19/08/2026, e o CFO anunciou recurso.

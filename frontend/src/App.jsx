@@ -13,6 +13,7 @@ import PatientsPage from './pages/PatientsPage'
 import PatientWorkspace from './pages/PatientWorkspace'
 import PlanningStep from './pages/PlanningStep'
 import ReportsPage from './pages/ReportsPage'
+import SafetyStep from './pages/SafetyStep'
 
 function Protected({ children }) {
   const { user, loading } = useAuth()
@@ -41,6 +42,7 @@ export default function App() {
           <Route path="evolucao" element={<EvolutionPage />} />
           <Route path="prontuario" element={<ConsentStep />} />
           <Route path="resumo" element={<GuidancePage />} />
+          <Route path="intercorrencias" element={<SafetyStep />} />
         </Route>
         <Route path="/agenda" element={<AgendaPage />} />
         <Route path="/estoque" element={<InventoryPage />} />
