@@ -31,7 +31,7 @@ class User(AbstractUser):
     email = models.EmailField("e-mail", unique=True)
     full_name = models.CharField("nome completo", max_length=150)
     professional_title = models.CharField("título", max_length=80, blank=True)  # ex.: Cirurgiã-Dentista
-    license_number = models.CharField("registro (CRO/CRM)", max_length=40, blank=True)
+    license_number = models.CharField("registro no CRO", max_length=40, blank=True)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["full_name"]

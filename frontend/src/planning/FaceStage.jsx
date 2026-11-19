@@ -68,6 +68,7 @@ export default function FaceStage({
   onSelectPoint,
   onMovePoint,
   onAddPoint,
+  onIdleTap,
 }) {
   const innerRef = useRef(null)
   const dragging = useRef(null)
@@ -236,15 +237,17 @@ export default function FaceStage({
             <button
               key={`ghost-${g.point_key}`}
               type="button"
-              className="ghost"
+              className="spot"
               style={{ left: `${g.x * 100}%`, top: `${g.y * 100}%` }}
               aria-label={`${regionLabel(g.region)}, ${name || g.point_key}: marcar ponto sugerido`}
               onClick={(e) => {
                 e.stopPropagation() // não cai no toque livre do palco
-                onAddPoint(g.x, g.y, g.point_key)
+                // Sem tratamento escolhido nada é marcado: a dose inicial depende do produto.
+                if (adding) onAddPoint(g.x, g.y, g.point_key)
+                else onIdleTap?.()
               }}
             >
-              {name && <span className="ghost-name">{name}</span>}
+              {name && <span className="spot-name">{name}</span>}
             </button>
           )
         })}

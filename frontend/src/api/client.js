@@ -122,6 +122,7 @@ export const api = {
     create: (patientId, body) => data(`/patients/${patientId}/plans`, { method: 'POST', json: body }),
     update: (id, body) => data(`/plans/${id}`, { method: 'PUT', json: body }),
     apply: (id) => data(`/plans/${id}/apply`, { method: 'POST' }),
+    applyCheck: (id) => data(`/plans/${id}/apply-check`),
   },
 
   inventory: {
@@ -132,6 +133,7 @@ export const api = {
     createLot: (body) => data('/inventory/lots', { method: 'POST', json: body }),
     updateLot: (id, body) => data(`/inventory/lots/${id}`, { method: 'PATCH', json: body }),
     movements: (lotId) => data(`/inventory/lots/${lotId}/movements`),
+    recall: (lotId) => data(`/inventory/lots/${lotId}/patients`),
     alerts: () => data('/inventory/alerts'),
     traceability: (patientId) => data(`/patients/${patientId}/traceability`),
   },
@@ -151,6 +153,13 @@ export const api = {
   },
 
   demo: { load: () => data('/demo', { method: 'POST' }) },
+
+  safety: {
+    list: (patientId) => data(`/patients/${patientId}/adverse-events`),
+    create: (patientId, body) => data(`/patients/${patientId}/adverse-events`, { method: 'POST', json: body }),
+    update: (id, body) => data(`/adverse-events/${id}`, { method: 'PATCH', json: body }),
+    notivisa: async (id) => (await request(`/adverse-events/${id}/notivisa`)).text(),
+  },
 
   consent: {
     terms: () => data('/consent/terms'),

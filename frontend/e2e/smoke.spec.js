@@ -539,8 +539,12 @@ test('paciente: "Mostrar dados" com a tela de planejamento aberta mantém o rasc
   // Os pontos sugeridos são o rascunho que precisa sobreviver a ocultar e mostrar.
   await page.getByRole('button', { name: 'Sugerir pontos' }).click()
   await expect(page.locator('.hotspot')).toHaveCount(33)
+  // As observações ficam numa janela, aberta pelo botão do cabeçalho.
   const notes = page.getByPlaceholder(/assimetria leve/)
+  const notesDialog = page.getByRole('dialog', { name: 'Observações' })
+  await page.getByRole('button', { name: /^Observações/ }).click()
   await notes.fill('rascunho sem salvar')
+  await notesDialog.getByRole('button', { name: 'Fechar' }).click()
   const reloads = []
   page.on('request', (request) => {
     if (request.url().endsWith(`/patients/${patient.id}/photos`)) reloads.push(request.url())
@@ -554,7 +558,9 @@ test('paciente: "Mostrar dados" com a tela de planejamento aberta mantém o rasc
   // Dois quadros bastam para os efeitos da tela rodarem: recarregar o plano apagaria o rascunho logo depois.
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
   expect(reloads).toEqual([])
+  await page.getByRole('button', { name: /^Observações/ }).click()
   await expect(notes).toHaveValue('rascunho sem salvar')
+  await notesDialog.getByRole('button', { name: 'Fechar' }).click()
   // A imagem continua carregando depois de ocultar e mostrar: o endereço temporário não foi revogado.
   const loaded = await page.locator('.stage img').first().evaluate((img) => img.complete && img.naturalWidth > 0)
   expect(loaded).toBe(true)

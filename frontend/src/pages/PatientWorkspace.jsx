@@ -12,6 +12,7 @@ const STEPS = [
   { to: 'evolucao', label: 'Evolução' },
   { to: 'prontuario', label: 'Prontuário / Termos' },
   { to: 'resumo', label: 'Resumo e Orientações' },
+  { to: 'intercorrencias', label: 'Intercorrências' },
 ]
 
 export default function PatientWorkspace() {

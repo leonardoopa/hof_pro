@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     "apps.guidance",
     "apps.audit",
     "apps.scheduling",
+    "apps.safety",
 ]
 
 MIDDLEWARE = [
@@ -110,3 +111,7 @@ JWT_ALGORITHM = "HS256"
 JWT_LIFETIME_HOURS = int(os.environ.get("JWT_LIFETIME_HOURS", "12"))
 CORS_ORIGINS = [o for o in os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",") if o]
 MAX_UPLOAD_MB = 12
+
+# Aviso (não bloqueio) de toxina aplicada de novo antes deste intervalo. 84 dias = 12 semanas, número citado em
+# literatura de uso terapêutico; para estética não há consenso brasileiro. A clínica ajusta pelo próprio protocolo.
+TOXIN_MIN_INTERVAL_DAYS = int(os.environ.get("TOXIN_MIN_INTERVAL_DAYS", "84"))

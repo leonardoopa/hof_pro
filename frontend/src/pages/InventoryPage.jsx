@@ -1,10 +1,10 @@
-import { AlertTriangle, History, Package, Plus, SlidersHorizontal } from 'lucide-react'
+import { AlertTriangle, History, Package, Plus, SlidersHorizontal, Users } from 'lucide-react'
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { api } from '../api/client'
 import ErrorList from '../components/ErrorList'
 import LotFields, { KINDS } from '../components/LotFields'
 import Modal from '../components/Modal'
-import { formatAmount, parseAmount } from '../planning/regions'
+import { formatAmount, parseAmount, pointLabel, regionLabel } from '../planning/regions'
 import { fmtDate } from '../planning/technique'
 
 const kindLabel = (key) => KINDS.find((k) => k.key === key)?.label ?? key
@@ -206,6 +206,67 @@ function MovementsRow({ lotId }) {
   )
 }
 
+/** Recall: quem recebeu o lote, para alerta da Anvisa ou recolhimento do fabricante. */
+function RecallModal({ lot, onClose }) {
+  const [data, setData] = useState(null)
+  const [error, setError] = useState(null)
+  useEffect(() => {
+    api.inventory.recall(lot.id).then(setData).catch(setError)
+  }, [lot.id])
+  return (
+    <Modal title={`Pacientes do lote ${lot.number}`} onClose={onClose} className="wide">
+      <ErrorList error={error} />
+      {!data && !error && <p className="inv-meta">Carregando…</p>}
+      {data && (
+        <>
+          <p className="inv-meta">
+            {data.product} · {data.rows.length} {data.rows.length === 1 ? 'aplicação' : 'aplicações'}
+          </p>
+          {data.rows.length ? (
+            <div className="inv-table-wrap">
+              <table className="inv-table">
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Paciente</th>
+                    <th>Telefone</th>
+                    <th>Região</th>
+                    <th>Quantidade</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.rows.map((r) => (
+                    <tr key={r.application_id}>
+                      <td>{new Date(r.applied_at).toLocaleDateString('pt-BR')}</td>
+                      <td>{r.hidden ? <em>Dados ocultos</em> : r.patient_name}</td>
+                      <td>{r.hidden ? '-' : r.patient_phone || '-'}</td>
+                      <td>
+                        {regionLabel(r.region)}
+                        {pointLabel(r.region, r.point_key) && <small> · {pointLabel(r.region, r.point_key)}</small>}
+                      </td>
+                      <td>
+                        {formatAmount(r.amount)} {r.unit}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="inv-meta">Nenhum paciente recebeu este lote.</p>
+          )}
+          <p className="inv-meta">A consulta fica registrada na auditoria.</p>
+        </>
+      )}
+      <div className="modal-actions">
+        <button className="btn" onClick={onClose}>
+          Fechar
+        </button>
+      </div>
+    </Modal>
+  )
+}
+
 function lotStatus(lot) {
   if (lot.expired) return { cls: 'expired', text: 'Vencido' }
   if (lot.days_to_expire <= 30) return { cls: 'soon', text: `Vence em ${lot.days_to_expire} d` }
@@ -219,6 +280,7 @@ export default function InventoryPage() {
   const [error, setError] = useState(null)
   const [modal, setModal] = useState(null) // 'product' | 'lot'
   const [adjusting, setAdjusting] = useState(null) // lote em ajuste de saldo
+  const [recall, setRecall] = useState(null) // lote com a lista de pacientes aberta
   const [openHistory, setOpenHistory] = useState(null) // id do lote com histórico aberto
 
   const load = useCallback(async () => {
@@ -358,6 +420,9 @@ export default function InventoryPage() {
                               >
                                 <History size={14} />
                               </button>
+                              <button className="icon-btn" aria-label={`Pacientes do lote ${lot.number}`} title="Pacientes que receberam este lote" onClick={() => setRecall(lot)}>
+                                <Users size={14} />
+                              </button>
                               <button className="icon-btn" aria-label={`Ajustar saldo do lote ${lot.number}`} onClick={() => setAdjusting(lot)}>
                                 <SlidersHorizontal size={14} />
                               </button>
@@ -380,6 +445,7 @@ export default function InventoryPage() {
 
       {modal === 'product' && <ProductModal onClose={() => setModal(null)} onSaved={done} />}
       {modal === 'lot' && <LotModal products={activeProducts} onClose={() => setModal(null)} onSaved={done} />}
+      {recall && <RecallModal lot={recall} onClose={() => setRecall(null)} />}
       {adjusting && (
         <AdjustModal
           lot={adjusting}

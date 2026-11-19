@@ -53,7 +53,7 @@ export default function AuthPage({ mode }) {
                 <input className="input" placeholder="Cirurgiã-Dentista" value={form.professional_title} onChange={set('professional_title')} />
               </label>
               <label className="field">
-                <span>Registro (CRO/CRM)</span>
+                <span>Registro no CRO</span>
                 <input className="input" value={form.license_number} onChange={set('license_number')} />
               </label>
             </div>

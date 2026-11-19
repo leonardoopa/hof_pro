@@ -1,0 +1,152 @@
+/* ---------- intercorrências ---------- */
+.safety {
+  display: grid;
+  gap: var(--space-4);
+}
+.safety-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+.safety-head h2 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xl);
+}
+.safety-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.btn.danger-solid {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: #fff;
+}
+.btn.danger-solid:hover:not(:disabled) {
+  filter: brightness(1.08);
+  background: var(--danger);
+}
+
+.protocol-timer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 10px 14px;
+  margin-bottom: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-weight: var(--weight-semibold);
+}
+.protocol-timer b {
+  margin-left: auto;
+  font-size: var(--text-xl);
+  font-variant-numeric: tabular-nums;
+}
+.protocol-steps {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 var(--space-3);
+  padding-left: 22px;
+}
+.signs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 6px var(--space-3);
+  margin: 0 0 var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.signs legend {
+  padding: 0 6px;
+  font-weight: var(--weight-semibold);
+}
+.sign {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sign.urgent {
+  color: var(--danger);
+  font-weight: var(--weight-medium);
+}
+.protocol-ref {
+  margin-bottom: var(--space-3);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.safety-form .alert {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.event-card {
+  display: grid;
+  gap: 6px;
+  border-left: 4px solid var(--line-strong);
+  animation: pop-in 0.3s var(--ease) both;
+}
+.event-card.grave {
+  border-left-color: var(--danger);
+}
+.event-card.moderada {
+  border-left-color: var(--warn);
+}
+.event-card header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.chip.sev-grave {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.chip.sev-moderada {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.event-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-2) var(--space-3);
+  margin-top: var(--space-2);
+}
+.event-actions .field {
+  margin: 0;
+}
+
+/* avisos antes de marcar o plano como aplicado */
+.apply-check {
+  display: grid;
+  gap: 6px;
+  margin-bottom: var(--space-3);
+}
+.apply-check-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  font-size: var(--text-sm);
+}
+.apply-check-item.atencao {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.apply-check-item svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.modal.wide {
+  width: min(760px, 100%);
+}

@@ -1080,7 +1080,7 @@
 }
 
 /* posições sugeridas da região aberta: alvos para marcar o ponto já com o nome anatômico */
-.ghost {
+.spot {
   position: absolute;
   z-index: 3;
   width: 30px;
@@ -1093,7 +1093,7 @@
   transform: translate(-50%, -50%) scale(calc(1 / var(--s)));
   animation: ghost-in 0.5s var(--ease) both;
 }
-.ghost::before {
+.spot::before {
   content: '';
   position: absolute;
   inset: 7px;
@@ -1104,14 +1104,14 @@
   animation: ghost-pulse 2.2s ease-out infinite;
   transition: inset var(--dur), background-color var(--dur);
 }
-.ghost:hover::before,
-.ghost:focus-visible::before {
+.spot:hover::before,
+.spot:focus-visible::before {
   inset: 3px;
   border-style: solid;
   background: color-mix(in srgb, var(--primary) 75%, transparent);
   animation: none;
 }
-.ghost-name {
+.spot-name {
   position: absolute;
   top: calc(100% - 2px);
   left: 50%;
@@ -1128,12 +1128,12 @@
   transform: translateX(-50%);
   transition: opacity var(--dur);
 }
-.ghost:hover,
-.ghost:focus-visible {
+.spot:hover,
+.spot:focus-visible {
   z-index: 5;
 }
-.ghost:hover .ghost-name,
-.ghost:focus-visible .ghost-name {
+.spot:hover .spot-name,
+.spot:focus-visible .spot-name {
   opacity: 1;
 }
 /* ponto marcado solta um anel que se abre uma vez */
@@ -1197,8 +1197,23 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ghost::before,
+  .spot::before,
   .pt.on::after {
     animation: none;
+  }
+}
+
+/* tocou numa posição sugerida sem tratamento escolhido: a dica chama a atenção para a faixa de tratamentos */
+.hud-hint.nudge {
+  animation: nudge 0.45s var(--ease) both;
+  background: var(--primary);
+  color: #fff;
+}
+@keyframes nudge {
+  25% {
+    transform: translateX(-6px);
+  }
+  75% {
+    transform: translateX(6px);
   }
 }
