@@ -13,6 +13,10 @@ import './styles/consent.css'
 import './styles/reports.css'
 import './styles/agenda.css'
 import './styles/safety.css'
+import './styles/timeline.css'
+import './styles/returns.css'
+import './styles/compliance.css'
+import './styles/finance.css'
 
 initTheme()
 

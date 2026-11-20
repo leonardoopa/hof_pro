@@ -6,7 +6,10 @@ import AnamnesisStep from './pages/AnamnesisStep'
 import AuthPage from './pages/AuthPage'
 import ConsentStep from './pages/ConsentStep'
 import InventoryPage from './pages/InventoryPage'
-import ComingSoon from './pages/ComingSoon'
+import CompliancePage from './compliance/CompliancePage'
+import FinancePage from './finance/FinancePage'
+import ReturnsPage from './returns/ReturnsPage'
+import TimelineStep from './pages/TimelineStep'
 import EvolutionPage from './evolution/EvolutionPage'
 import GuidancePage from './guidance/GuidancePage'
 import PatientsPage from './pages/PatientsPage'
@@ -43,14 +46,14 @@ export default function App() {
           <Route path="prontuario" element={<ConsentStep />} />
           <Route path="resumo" element={<GuidancePage />} />
           <Route path="intercorrencias" element={<SafetyStep />} />
+          <Route path="historico" element={<TimelineStep />} />
         </Route>
         <Route path="/agenda" element={<AgendaPage />} />
         <Route path="/estoque" element={<InventoryPage />} />
         <Route path="/relatorios" element={<ReportsPage />} />
-        <Route
-          path="/financeiro"
-          element={<ComingSoon title="Financeiro" text="Orçamentos e recebimentos ligados ao plano de cada paciente." />}
-        />
+        <Route path="/retornos" element={<ReturnsPage />} />
+        <Route path="/pendencias" element={<CompliancePage />} />
+        <Route path="/financeiro" element={<FinancePage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/pacientes" replace />} />
