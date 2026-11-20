@@ -27,6 +27,7 @@ export async function signIn(page) {
     get: (path) => call('get', path),
     post: (path, data) => call('post', path, { data }),
     put: (path, data) => call('put', path, { data }),
+    patch: (path, data) => call('patch', path, { data }),
     upload: (path, file, kind = 'frontal') => call('post', path, { multipart: { file, kind } }),
   }
 }
