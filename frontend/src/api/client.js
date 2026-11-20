@@ -152,6 +152,31 @@ export const api = {
     convert: (id) => data(`/appointments/${id}/convert`, { method: 'POST' }),
   },
 
+  timeline: { get: (patientId, limit = 100) => data(`/patients/${patientId}/timeline?limit=${limit}`) },
+  returns: { list: (withinDays = 30) => data(`/returns?within_days=${withinDays}`) },
+  compliance: { list: () => data('/compliance') },
+
+  finance: {
+    priceItems: () => data('/finance/price-items'),
+    createPriceItem: (body) => data('/finance/price-items', { method: 'POST', json: body }),
+    updatePriceItem: (id, body) => data(`/finance/price-items/${id}`, { method: 'PATCH', json: body }),
+    budgets: ({ patientId, status, limit } = {}) => {
+      const q = new URLSearchParams()
+      if (patientId) q.set('patient_id', patientId)
+      if (status) q.set('status', status)
+      if (limit) q.set('limit', limit)
+      return data(`/finance/budgets${q.size ? `?${q}` : ''}`)
+    },
+    budget: (id) => data(`/finance/budgets/${id}`),
+    createBudget: (body) => data('/finance/budgets', { method: 'POST', json: body }),
+    budgetFromPlan: (planId) => data(`/finance/budgets/from-plan/${planId}`, { method: 'POST' }),
+    updateBudget: (id, body) => data(`/finance/budgets/${id}`, { method: 'PUT', json: body }),
+    setBudgetStatus: (id, status) => data(`/finance/budgets/${id}/status`, { method: 'POST', json: { status } }),
+    addPayment: (id, body) => data(`/finance/budgets/${id}/payments`, { method: 'POST', json: body }),
+    reversePayment: (id, reason) => data(`/finance/payments/${id}/reverse`, { method: 'POST', json: { reason } }),
+    summary: (month) => data(`/finance/summary?month=${month}`),
+  },
+
   demo: { load: () => data('/demo', { method: 'POST' }) },
 
   safety: {

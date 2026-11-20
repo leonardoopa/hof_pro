@@ -131,7 +131,7 @@ def create_product(data: ProductIn, user: User = Depends(current_user)):
 def update_product(product_id: int, data: ProductPatch, user: User = Depends(current_user)):
     product = _own_product(user, product_id)
     for field, value in data.model_dump(exclude_unset=True).items():
-        if value is None:
+        if value is None and field != "return_interval_days":  # só o intervalo aceita null (limpa o valor)
             continue
         setattr(product, field, value)
     product.save()

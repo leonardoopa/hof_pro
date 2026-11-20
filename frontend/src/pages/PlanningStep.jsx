@@ -1,6 +1,6 @@
-import { AlertTriangle, Camera, Check, CheckCheck, ChevronLeft, Eye, EyeOff, MousePointerClick, Minus, PackagePlus, Pencil, Plus, Save, ScanFace, Smile, Sparkles, Trash2, Upload, Wand2 } from 'lucide-react'
+import { AlertTriangle, Camera, Check, CheckCheck, ChevronLeft, Eye, EyeOff, MousePointerClick, Minus, PackagePlus, Pencil, Plus, Receipt, Save, ScanFace, Smile, Sparkles, Trash2, Upload, Wand2 } from 'lucide-react'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useOutletContext } from 'react-router-dom'
+import { Link, useNavigate, useOutletContext } from 'react-router-dom'
 import { api } from '../api/client'
 import ConfirmModal from '../components/ConfirmModal'
 import ErrorList from '../components/ErrorList'
@@ -89,6 +89,7 @@ function AmountField({ value, onChange, onStep, ...props }) {
 
 export default function PlanningStep() {
   const { patient } = useOutletContext()
+  const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [anamnesisDone, setAnamnesisDone] = useState(true)
@@ -567,6 +568,19 @@ export default function PlanningStep() {
     }
   }
 
+  // Orçamento do plano salvo (preços da tabela do financeiro); abre em /financeiro, com os avisos de itens sem preço.
+  async function generateBudget() {
+    setBusy(true)
+    setError(null)
+    try {
+      const budget = await api.finance.budgetFromPlan(plan.id)
+      navigate(`/financeiro?orcamento=${budget.id}`, { state: { warnings: budget.warnings } })
+    } catch (err) {
+      setError(err)
+      setBusy(false)
+    }
+  }
+
   // Plano aplicado fica travado: um novo plano parte dos mesmos pontos, sem lotes.
   function startNewPlan() {
     setPlan(null)
@@ -667,6 +681,11 @@ export default function PlanningStep() {
                   <CheckCheck size={16} /> Marcar como aplicado
                 </button>
               )
+            )}
+            {plan && (
+              <button className="btn" onClick={generateBudget} disabled={busy || dirty} title={dirty ? 'Salve o plano antes' : 'Orçamento com os preços cadastrados no Financeiro'}>
+                <Receipt size={16} /> Gerar orçamento
+              </button>
             )}
             <button className="btn primary" onClick={save} disabled={busy || (!photo && !modelMode) || applied}>
               <Save size={16} /> {busy ? 'Salvando…' : 'Salvar plano'}
