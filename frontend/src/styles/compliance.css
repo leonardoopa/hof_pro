@@ -1,0 +1,108 @@
+/* Pendências do prontuário. Usa as variáveis de tokens.css/base.css. */
+.compliance {
+  display: grid;
+  gap: var(--space-4);
+}
+.compliance .page-head {
+  margin-bottom: var(--space-2);
+}
+.compliance-loading {
+  color: var(--muted);
+}
+
+.compliance-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-3);
+}
+.compliance-stats .stat {
+  display: grid;
+  gap: 2px;
+  padding: var(--space-3) 14px;
+  border-radius: var(--radius-sm);
+  background: var(--primary-soft);
+}
+.compliance-stats .stat strong {
+  font-size: var(--text-4xl);
+  font-variant-numeric: tabular-nums;
+  color: var(--primary-strong);
+}
+.compliance-stats .stat span {
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+.compliance-stats .stat.alta {
+  background: var(--danger-soft);
+}
+.compliance-stats .stat.alta strong {
+  color: var(--danger);
+}
+.compliance-stats .stat.media {
+  background: var(--warn-soft);
+}
+.compliance-stats .stat.media strong {
+  color: var(--warn);
+}
+
+.compliance-group {
+  border-left: 4px solid var(--primary);
+}
+.compliance-group.alta {
+  border-left-color: var(--danger);
+}
+.compliance-group.alta .card-title svg {
+  color: var(--danger);
+}
+.compliance-group.media {
+  border-left-color: var(--warn);
+}
+.compliance-group.media .card-title svg {
+  color: var(--warn);
+}
+.compliance-group.baixa .card-title svg {
+  color: var(--primary-strong);
+}
+
+.compliance-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.compliance-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.compliance-item:first-child {
+  border-top: 0;
+}
+.compliance-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.compliance-text > span {
+  color: var(--muted);
+  font-size: var(--text-md);
+  overflow-wrap: anywhere;
+}
+.compliance-name.hidden {
+  color: var(--muted);
+  font-style: italic;
+  font-weight: var(--weight-semibold);
+}
+.compliance-item .btn {
+  flex: none;
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .compliance-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
