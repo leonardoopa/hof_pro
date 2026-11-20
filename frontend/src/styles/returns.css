@@ -1,0 +1,30 @@
+/* Retornos e lembretes. Usa as variáveis de tokens.css/base.css. */
+.returns .ret-disclaimer { margin-bottom: var(--space-4); }
+.ret-card { margin-bottom: var(--space-4); }
+.ret-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-3); }
+.ret-filters { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.ret-note { color: var(--muted); font-size: var(--text-sm); margin: var(--space-2) 0; }
+.ret-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* No celular a tabela rola dentro do card, e a página não rola para o lado. */
+.ret-table-wrap { overflow-x: auto; }
+.ret-table { width: 100%; min-width: 760px; border-collapse: collapse; font-size: var(--text-md); }
+.ret-table th { text-align: left; color: var(--muted); font-weight: var(--weight-medium); font-size: var(--text-xs); padding: var(--space-1) var(--space-2); }
+.ret-table td { padding: var(--space-2); border-top: 1px solid var(--line); vertical-align: top; }
+.ret-phone { display: block; color: var(--muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+.ret-name { font-weight: var(--weight-semibold); color: var(--text); }
+.ret-name:hover { color: var(--primary-strong); text-decoration: underline; }
+.ret-name.hidden-data { font-style: italic; color: var(--muted); font-weight: var(--weight-regular); }
+.ret-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; justify-content: flex-end; }
+.ret-actions .btn { white-space: nowrap; }
+
+.ret-status { display: inline-block; padding: 2px 9px; border-radius: var(--radius-pill); font-size: var(--text-xs); font-weight: var(--weight-semibold); }
+.ret-status.vencido { background: var(--danger-soft); color: var(--danger); }
+.ret-status.proximo { background: var(--warn-soft); color: var(--warn); }
+
+.ret-products summary { cursor: pointer; font-weight: var(--weight-semibold); font-size: var(--text-base); }
+.ret-products summary:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--radius-xs); }
+.ret-product-list { list-style: none; margin: var(--space-2) 0 0; padding: 0; }
+.ret-product-list li { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3); padding: var(--space-2) 0; border-top: 1px solid var(--line); font-size: var(--text-md); }
+.ret-product-list li.inactive { opacity: 0.6; }
+.ret-interval { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }

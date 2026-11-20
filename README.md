@@ -90,7 +90,11 @@ Testes:
 - **Intercorrências** (app `safety`, aba "Intercorrências" do paciente): registro de evento adverso (oclusão vascular, nódulo, edema, hematoma, ptose, infecção, alergia, assimetria) ligado à aplicação, que traz região, ponto e lote. O botão "Suspeita de oclusão vascular" abre o protocolo na tela: cronômetro desde o início, passos sem dose, checklist de sinais (alteração visual, dor ocular ou sinal neurológico vira aviso de emergência) e as referências (Cohen et al., Aesthet Surg J 2015; guia CMAC, JCAD 2021; força-tarefa ASDS). A hialuronidase usada sai do saldo do lote, como numa aplicação. Desfecho, data e número da notificação à Anvisa ficam no registro, e "Copiar resumo para o Notivisa" gera o texto para colar no formulário. O sistema não envia nada à Anvisa.
 - **Recall por lote** (`GET /api/inventory/lots/{id}/patients`, botão com ícone de pessoas no Estoque): quem recebeu o lote, com data, região e contato, para alerta da Anvisa ou recolhimento do fabricante. Paciente com dados ocultos aparece como tal. A consulta é auditada.
 - **Checagem antes de "Marcar como aplicado"** (`GET /api/plans/{id}/apply-check`): avisa, sem bloquear, anamnese não preenchida, termo do tratamento não assinado, toxina aplicada há menos de `TOXIN_MIN_INTERVAL_DAYS` dias (padrão 84, com o total de unidades no período), preenchedor em zona de maior risco vascular (nariz, glabela, testa, nasolabial, malar), ponto sem lote e intercorrência em acompanhamento.
-- Financeiro aparece como "Em breve".
+- **Histórico do paciente** (aba "Histórico", `GET /api/patients/{id}/timeline?limit=`): linha do tempo única, do mais novo para o mais antigo, com plano, aplicação, termo, intercorrência, agendamento, foto, versão de anamnese, orçamento e pagamento. Com dados ocultos, nenhum item leva nome, texto livre nem foto. A leitura é auditada.
+- **Retornos** (`GET /api/returns?within_days=`, tela "Retornos"): quem está perto de voltar para reaplicação, por paciente e tipo de produto. O intervalo vem de `Product.return_interval_days` ou, sem ele, do padrão do tipo (toxina 120 dias, bioestimulador 180, preenchedor 365, skinbooster 90; "outro" só com intervalo próprio). São valores de partida configuráveis, **não recomendação clínica**. "Próximo" = vence em até 30 dias. Paciente com agendamento futuro não cancelado sai da fila. A tela gera a mensagem e o link `wa.me`; o envio é do dentista (nada é enviado pelo sistema).
+- **Pendências do prontuário** (`GET /api/compliance`, tela "Pendências"): anamnese ausente, procedimento aplicado sem termo, ponto aplicado sem lote, intercorrência em acompanhamento e plano parado há mais de 30 dias, por prioridade, com link para a aba certa.
+- **Financeiro** (app `finance`, `/api/finance`, tela "Financeiro"): tabela de preços por tratamento e região, orçamento manual ou gerado do plano (`from-plan`; item sem preço entra com valor 0 e aviso), aprovação, pagamentos por forma, **estorno por lançamento negativo** (pagamento nunca é editado nem apagado), saldo e resumo mensal. Dinheiro em centavos inteiros. O botão "Gerar orçamento" fica no planejamento.
+- **Base do assistente** (app `assistant`, `/api/assistant`): só a camada de ações, sem LLM e sem tela. `GET /actions` lista o catálogo; leitura executa na hora; escrita (`create_appointment`, `reschedule_appointment`, `cancel_appointment`) vira proposta que só grava em `POST /proposals/{id}/confirm` (idempotente, vence em 10 minutos, auditada). O dono vem sempre da sessão. Um assistente de chat futuro deve chamar estas ações.
 
 ## Decisões e limites
 
@@ -114,10 +118,20 @@ Testes:
 - Todo CSV exportado neutraliza texto que começa com `=`, `+`, `-` ou `@` (apóstrofo na frente), para o Excel não executar como fórmula.
 - Retenção: a clínica precisa guardar os dados e os relatórios das pessoas por 5 anos, então o nome e o telefone do lead permanecem no agendamento (cancelar só muda o status) e nada é apagado automaticamente. Listar agendamentos não grava log de acesso (criar e editar gravam); decisão consciente, a rever se a rastreabilidade de leitura for exigida.
 
+## Decisões desta rodada (2026-11-20)
+
+- Escopo escolhido pelo responsável: histórico, retornos, financeiro e só a base do assistente; "pendências" foi escolha minha a partir da pesquisa.
+- Fica de fora de propósito: LLM, WhatsApp API, voz, bot de paciente, anamnese por link público, calculadora de dose, aniversário/NPS e programa de indicação (base LGPD, ética de publicidade e validação clínica pendentes).
+- Pagamento duplicado por clique duplo com valor parcial é indistinguível de dois pagamentos reais (sem chave de idempotência); só o saldo trava. `select_for_update` não age no SQLite: a serialização real vale no SQL Server e não foi testada lá.
+- A base legal da HOF por dentistas está em disputa judicial (a 8ª Turma do TRF1 anulou a Resolução CFO 198/2019 em 19/08/2026; cabe recurso). Por isso o produto não usa "especialista em HOF" como rótulo nem campo obrigatório. Não substitui orientação jurídica.
+- Retenção continua 5 anos, sem purge (decisão do responsável). A pesquisa citou prazos maiores para prontuário (10 anos pelo CFO, 20 pela Lei 13.787/2018); como nada é apagado, não há conflito, mas confirme com assessoria jurídica antes de qualquer rotina de expurgo.
+
 ## Próximos passos
 
 1. Agenda: lembretes por WhatsApp/e-mail, recorrência, bloqueio de horários e visão diária no celular.
-2. Financeiro (orçamentos e recebimentos) e histórico por paciente.
-3. Simulação por IA a partir do planejamento.
-4. Da pesquisa de 2026-11 (ainda não feito): retorno de 15 dias e retoque de toxina ligado à sessão original; kit de emergência com conferência mensal no estoque; copiar sessão anterior e modelos de plano; prontuário completo exportável em PDF; anamnese preenchida pelo paciente com confirmação da profissional.
-5. Público: no início o produto é só para cirurgiões-dentistas (decisão do responsável, 2026-11-19); o cadastro pede o registro no CRO. Risco a acompanhar: o TRF-1 anulou a Resolução CFO 198/2019 (HOF como especialidade do dentista) em 19/08/2026, e o CFO anunciou recurso.
+2. Financeiro: parcelamento, pacotes de sessões e chave de idempotência nos pagamentos.
+3. Assistente de chat (LLM com tool use sobre `/api/assistant`), depois bot de WhatsApp para pacientes (API oficial, templates aprovados, opt-in).
+4. Retornos: editar o intervalo por produto na tela de Estoque.
+5. Simulação por IA a partir do planejamento.
+6. Da pesquisa de 2026-11 (ainda não feito): retorno de 15 dias e retoque de toxina ligado à sessão original; kit de emergência com conferência mensal no estoque; copiar sessão anterior e modelos de plano; prontuário completo exportável em PDF; anamnese preenchida pelo paciente com confirmação da profissional.
+7. Público: no início o produto é só para cirurgiões-dentistas (decisão do responsável, 2026-11-19); o cadastro pede o registro no CRO. Risco a acompanhar: o TRF-1 anulou a Resolução CFO 198/2019 (HOF como especialidade do dentista) em 19/08/2026, e o CFO anunciou recurso.

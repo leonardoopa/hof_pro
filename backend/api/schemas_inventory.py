@@ -9,6 +9,8 @@ KindKey = Literal["toxina", "preenchedor", "bioestimulador", "skinbooster", "out
 UnitKey = Literal["ml", "U"]
 # Os espaços saem antes da conta do mínimo: número só com espaços é recusado, não gravado vazio.
 LotNumber = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=40)]
+# Dias até o retorno do paciente (1 dia a 5 anos). Nulo = padrão do tipo de produto.
+ReturnInterval = Annotated[int, Field(ge=1, le=1825, strict=True)]
 
 
 class LotBase(BaseModel):
@@ -32,6 +34,7 @@ class ProductPatch(BaseModel):
     kind: KindKey | None = None
     anvisa_registration: str | None = Field(default=None, max_length=40)
     active: bool | None = None
+    return_interval_days: ReturnInterval | None = None  # null explícito limpa o intervalo (volta ao padrão do tipo)
 
 
 class ProductOut(BaseModel):
@@ -43,6 +46,7 @@ class ProductOut(BaseModel):
     unit: str
     anvisa_registration: str
     active: bool
+    return_interval_days: int | None = None
 
 
 class LotIn(LotBase):

@@ -27,6 +27,8 @@ class Product(models.Model):
     unit = models.CharField("unidade", max_length=2, choices=Unit.choices, default=Unit.ML)
     anvisa_registration = models.CharField("registro Anvisa", max_length=40, blank=True)
     active = models.BooleanField(default=True)
+    # Dias até o retorno após aplicar este produto. Nulo = usa o padrão do tipo (api/returns_logic.py).
+    return_interval_days = models.PositiveSmallIntegerField("intervalo de retorno (dias)", null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
