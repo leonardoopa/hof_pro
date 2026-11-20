@@ -39,7 +39,7 @@ services:
              python manage.py migrate &&
              uvicorn config.asgi:application --host 0.0.0.0 --port 8000 --reload"
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8000}:8000" # porta no seu computador; troque no .env se a 8000 estiver ocupada
     volumes:
       - ./backend:/app # recarrega ao editar o código
       - media_data:/data/media
