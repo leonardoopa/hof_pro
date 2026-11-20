@@ -1,0 +1,157 @@
+/* ---------- histórico do paciente ---------- */
+.timeline {
+  display: grid;
+  gap: var(--space-4);
+}
+.timeline-head {
+  display: grid;
+  gap: var(--space-2);
+}
+.timeline-head h2 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xl);
+}
+.timeline .alert {
+  margin-bottom: 0;
+}
+
+.tl-month h3 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  font-size: var(--text-lg);
+}
+.tl-month h3 span {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-regular);
+}
+
+/* Linha vertical com um marcador por item. A cor de cada tipo vem de --tl-fg e --tl-bg. */
+.tl-list {
+  position: relative;
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0 0 0 40px;
+  list-style: none;
+}
+.tl-list::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 15px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--line);
+}
+.tl-item {
+  --tl-fg: var(--primary-strong);
+  --tl-bg: var(--primary-soft);
+  position: relative;
+  animation: pop-in 0.3s var(--ease) both;
+}
+.tl-icon {
+  position: absolute;
+  top: 10px;
+  left: -40px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 2px solid var(--bg);
+  border-radius: 50%;
+  background: var(--tl-bg);
+  color: var(--tl-fg);
+}
+.tl-item.upcoming .tl-icon {
+  border: 2px dashed var(--tl-fg);
+}
+
+.tl-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  color: var(--text);
+  text-decoration: none;
+}
+a.tl-body {
+  transition: border-color var(--dur), background-color var(--dur), transform var(--dur);
+}
+a.tl-body:hover {
+  border-color: var(--tl-fg);
+  background: var(--surface-soft);
+}
+a.tl-body:active {
+  transform: translateY(1px);
+}
+.tl-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.tl-text strong {
+  overflow-wrap: anywhere;
+  font-weight: var(--weight-semibold);
+}
+.tl-detail {
+  color: var(--text);
+  font-size: var(--text-md);
+  overflow-wrap: anywhere;
+}
+.tl-when {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+.tl-go {
+  flex: none;
+  color: var(--muted);
+}
+
+.tl-item.kind-aplicacao,
+.tl-item.kind-pagamento {
+  --tl-fg: var(--ok);
+  --tl-bg: var(--ok-soft);
+}
+.tl-item.kind-intercorrencia {
+  --tl-fg: var(--danger);
+  --tl-bg: var(--danger-soft);
+}
+.tl-item.kind-agendamento,
+.tl-item.kind-orcamento {
+  --tl-fg: var(--warn);
+  --tl-bg: var(--warn-soft);
+}
+.tl-item.kind-foto {
+  --tl-fg: var(--muted);
+  --tl-bg: var(--surface-soft);
+}
+
+@media (max-width: 560px) {
+  .tl-list {
+    padding-left: 34px;
+  }
+  .tl-list::before {
+    left: 12px;
+  }
+  .tl-icon {
+    left: -34px;
+    width: 28px;
+    height: 28px;
+  }
+  .tl-body {
+    padding: var(--space-3);
+  }
+}
