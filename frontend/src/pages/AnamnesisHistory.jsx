@@ -40,6 +40,7 @@ export default function AnamnesisHistory({ patientId, current }) {
               <ChevronRight size={16} aria-hidden />
               <strong>Versão {version.number}</strong>
               {index === 0 && <span className="chip ok">Atual</span>}
+              {version.signature ? <span className="chip">Assinada</span> : <span className="chip warn">Sem assinatura</span>}
               <span className="version-meta">
                 {new Date(version.saved_at).toLocaleString('pt-BR')} · {version.saved_by}
               </span>

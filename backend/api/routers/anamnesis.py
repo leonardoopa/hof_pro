@@ -1,12 +1,33 @@
-from django.db import transaction
-from fastapi import APIRouter, Depends, HTTPException, status
+from django.db import IntegrityError, transaction
+from django.utils import timezone
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from apps.accounts.models import User
-from apps.clinical.models import Anamnesis, AnamnesisAnswer, AnamnesisQuestion, AnamnesisVersion
+from apps.audit.models import AccessLog
+from apps.clinical.models import (
+    ANAMNESIS_DECLARATION,
+    Anamnesis,
+    AnamnesisAnswer,
+    AnamnesisQuestion,
+    AnamnesisSignature,
+    AnamnesisVersion,
+    anamnesis_hash,
+)
 
+from ..audit import client_ip, log_access
 from ..deps import current_user, get_patient_or_404
 from ..orm import orm
-from ..schemas import AnamnesisIn, AnamnesisOut, AnamnesisVersionOut, AnswerOut, QuestionOut, VersionAnswerOut
+from ..schemas import (
+    AnamnesisIn,
+    AnamnesisOut,
+    AnamnesisSignatureOut,
+    AnamnesisSignIn,
+    AnamnesisVersionOut,
+    AnswerOut,
+    QuestionOut,
+    VersionAnswerOut,
+)
+from .consent import _decode_signature
 
 router = APIRouter(tags=["anamnese"])
 
@@ -17,15 +38,27 @@ def list_questions(user: User = Depends(current_user)):
     return list(AnamnesisQuestion.objects.filter(active=True))
 
 
+def _signature_out(version: AnamnesisVersion) -> AnamnesisSignatureOut | None:
+    sig = AnamnesisSignature.objects.filter(version=version).first()
+    if sig is None:
+        return None
+    return AnamnesisSignatureOut(
+        id=sig.id, version=version.number, signer_name=sig.signer_name, signed_at=sig.signed_at, document_hash=sig.document_hash
+    )
+
+
 def _out(anamnesis: Anamnesis | None) -> AnamnesisOut:
     if anamnesis is None:
-        return AnamnesisOut(answers=[], notes="", updated_at=None, version=None)
+        return AnamnesisOut(answers=[], notes="", updated_at=None, version=None, declaration=ANAMNESIS_DECLARATION)
+    latest = anamnesis.versions.first()
     return AnamnesisOut(
         # Só o que o formulário mostra e devolve ao salvar. As demais respostas aparecem nas versões.
         answers=[AnswerOut.model_validate(a) for a in anamnesis.answers.filter(question__active=True)],
         notes=anamnesis.notes,
         updated_at=anamnesis.updated_at,
-        version=anamnesis.versions.values_list("number", flat=True).first(),
+        version=latest.number if latest else None,
+        signature=_signature_out(latest) if latest else None,
+        declaration=ANAMNESIS_DECLARATION,
     )
 
 
@@ -86,6 +119,46 @@ def list_versions(patient_id: int, user: User = Depends(current_user)):
             saved_by=str(v.saved_by),
             saved_at=v.saved_at,
             answers=[VersionAnswerOut.model_validate(a) for a in v.answers.all()],
+            signature=_signature_out(v),
         )
         for v in versions
     ]
+
+
+@router.post("/patients/{patient_id}/anamnesis/signature", response_model=AnamnesisOut, status_code=status.HTTP_201_CREATED)
+@orm
+def sign_anamnesis(patient_id: int, data: AnamnesisSignIn, request: Request, user: User = Depends(current_user)):
+    """O paciente assina a versão atual da anamnese. Uma assinatura por versão; alterar a anamnese pede assinatura nova."""
+    patient = get_patient_or_404(user, patient_id)
+    anamnesis = Anamnesis.objects.filter(patient=patient).first()
+    version = anamnesis.versions.first() if anamnesis else None
+    if version is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Salve a anamnese antes de colher a assinatura.")
+    if AnamnesisSignature.objects.filter(version=version).exists():
+        raise HTTPException(status.HTTP_409_CONFLICT, f"A versão {version.number} da anamnese já está assinada.")
+    image = _decode_signature(data.signature)
+    name = data.signer_name.strip()
+    signed_at = timezone.now().replace(microsecond=0)
+    try:
+        with transaction.atomic():
+            sig = AnamnesisSignature.objects.create(
+                version=version, collected_by=user, signer_name=name, declaration=ANAMNESIS_DECLARATION, image=image,
+                ip_address=client_ip(request), signed_at=signed_at,
+                document_hash=anamnesis_hash(
+                    version=version, patient_id=patient.id, declaration=ANAMNESIS_DECLARATION, signer_name=name,
+                    signed_at=signed_at, image=image,
+                ),
+            )
+            log_access(user, AccessLog.Action.CREATE, "assinatura_anamnese", sig.id, request)
+    except IntegrityError:  # duas assinaturas ao mesmo tempo para a mesma versão: a segunda perde
+        raise HTTPException(status.HTTP_409_CONFLICT, f"A versão {version.number} da anamnese já está assinada.")
+    return _out(anamnesis)
+
+
+@router.get("/anamnesis-signatures/{signature_id}/image")
+@orm
+def signature_image(signature_id: int, user: User = Depends(current_user)):
+    sig = AnamnesisSignature.objects.filter(pk=signature_id, version__anamnesis__patient__owner=user).first()
+    if sig is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Assinatura não encontrada.")
+    return Response(bytes(sig.image), media_type="image/png", headers={"Cache-Control": "private, no-store"})
