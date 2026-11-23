@@ -1,10 +1,101 @@
-import { ClipboardList } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { ClipboardList, PenLine, ShieldCheck } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useOutletContext } from 'react-router-dom'
 import { api } from '../api/client'
 import ErrorList from '../components/ErrorList'
+import SignaturePad from '../components/SignaturePad'
 import { useToast } from '../components/Toast'
 import AnamnesisHistory from './AnamnesisHistory'
+
+/** Assinatura do paciente sobre a versão salva. Alterar a anamnese cria versão nova, que pede assinatura nova. */
+function AnamnesisSignature({ patient, version, signature, declaration, dirty, onSigned }) {
+  const pad = useRef(null)
+  const [name, setName] = useState(patient.full_name)
+  const [agree, setAgree] = useState(false)
+  const [blank, setBlank] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+  const [imageUrl, setImageUrl] = useState(null)
+
+  useEffect(() => {
+    if (!signature) return
+    let url
+    api.anamnesis
+      .signatureUrl(signature.id)
+      .then((u) => setImageUrl((url = u)))
+      .catch(() => setImageUrl(null))
+    return () => url && URL.revokeObjectURL(url)
+  }, [signature?.id])
+
+  async function submit(e) {
+    e.preventDefault()
+    setBusy(true)
+    setError(null)
+    try {
+      onSigned(await api.anamnesis.sign(patient.id, { signer_name: name.trim(), signature: pad.current.toDataURL() }))
+    } catch (err) {
+      setError(err)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (signature && !dirty) {
+    return (
+      <section className="card anamnesis-signature signed" aria-label="Assinatura da anamnese">
+        <div className="card-title">
+          <ShieldCheck size={18} /> Assinada pelo paciente
+          <span className="sub">versão {signature.version}</span>
+        </div>
+        <p>
+          {signature.signer_name}, em {new Date(signature.signed_at).toLocaleString('pt-BR')}.
+        </p>
+        {imageUrl && <img className="signature-image" src={imageUrl} alt={`Assinatura de ${signature.signer_name}`} />}
+        <p className="hint">Código de verificação (SHA-256): {signature.document_hash}</p>
+      </section>
+    )
+  }
+
+  return (
+    <section className="card anamnesis-signature" aria-label="Assinatura da anamnese">
+      <div className="card-title">
+        <PenLine size={18} /> Assinatura do paciente
+        {version && <span className="sub">versão {version}</span>}
+      </div>
+      {!version || dirty ? (
+        <p className="hint">
+          {version ? 'Há alterações não salvas. Salve a anamnese' : 'Salve a anamnese'} antes de colher a assinatura: o paciente assina
+          a versão salva.
+        </p>
+      ) : (
+        <form onSubmit={submit}>
+          <p className="declaration">{declaration}</p>
+          <ErrorList error={error} />
+          <label className="field">
+            <span>Nome de quem assina</span>
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)} required minLength={2} maxLength={150} />
+          </label>
+          <div className="field">
+            <span>Assinatura (use o dedo, caneta ou mouse)</span>
+            <SignaturePad padRef={pad} onChange={setBlank} />
+            <button type="button" className="btn ghost small" onClick={() => pad.current.clear()}>
+              Limpar
+            </button>
+          </div>
+          <label className="check">
+            <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /> O paciente leu a declaração e
+            confirma as respostas.
+          </label>
+          <div className="save-bar">
+            <button className="btn primary" disabled={busy || blank || !agree || name.trim().length < 2}>
+              {busy ? 'Assinando…' : 'Assinar anamnese'}
+            </button>
+          </div>
+        </form>
+      )}
+    </section>
+  )
+}
 
 export default function AnamnesisStep() {
   const { patient } = useOutletContext()
@@ -14,6 +105,9 @@ export default function AnamnesisStep() {
   const [notes, setNotes] = useState('')
   const [savedAt, setSavedAt] = useState(null)
   const [version, setVersion] = useState(null)
+  const [signature, setSignature] = useState(null)
+  const [declaration, setDeclaration] = useState('')
+  const [dirty, setDirty] = useState(false)
   const [showMissing, setShowMissing] = useState(false)
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -29,6 +123,8 @@ export default function AnamnesisStep() {
         setNotes(saved.notes)
         setSavedAt(saved.updated_at)
         setVersion(saved.version)
+        setSignature(saved.signature)
+        setDeclaration(saved.declaration)
       })
       .catch((err) => alive && setError(err))
     return () => {
@@ -42,9 +138,14 @@ export default function AnamnesisStep() {
     [questions, answers],
   )
 
-  const choose = (id, answer) =>
+  const choose = (id, answer) => {
+    setDirty(true)
     setAnswers((prev) => ({ ...prev, [id]: { answer, detail: answer ? (prev[id]?.detail ?? '') : '' } }))
-  const describe = (id, detail) => setAnswers((prev) => ({ ...prev, [id]: { ...prev[id], detail } }))
+  }
+  const describe = (id, detail) => {
+    setDirty(true)
+    setAnswers((prev) => ({ ...prev, [id]: { ...prev[id], detail } }))
+  }
 
   async function save() {
     if (missing.length) {
@@ -62,6 +163,8 @@ export default function AnamnesisStep() {
       const saved = await api.anamnesis.save(patient.id, body)
       setSavedAt(saved.updated_at)
       setVersion(saved.version)
+      setSignature(saved.signature)
+      setDirty(false)
       toast(saved.version === version ? `Nada mudou: continua a versão ${version}` : 'Anamnese salva')
     } catch (err) {
       setError(err)
@@ -119,7 +222,14 @@ export default function AnamnesisStep() {
 
         <label className="field" style={{ marginTop: 14 }}>
           <span>Observações gerais</span>
-          <textarea className="input" value={notes} onChange={(e) => setNotes(e.target.value)} />
+          <textarea
+            className="input"
+            value={notes}
+            onChange={(e) => {
+              setDirty(true)
+              setNotes(e.target.value)
+            }}
+          />
         </label>
 
         <div className="save-bar">
@@ -139,7 +249,18 @@ export default function AnamnesisStep() {
         </div>
         {toastNode}
       </div>
-      {version && <AnamnesisHistory patientId={patient.id} current={version} />}
+      <AnamnesisSignature
+        patient={patient}
+        version={version}
+        signature={signature}
+        declaration={declaration}
+        dirty={dirty}
+        onSigned={(saved) => {
+          setSignature(saved.signature)
+          toast('Anamnese assinada')
+        }}
+      />
+      {version && <AnamnesisHistory key={signature?.id ?? 'unsigned'} patientId={patient.id} current={version} />}
     </>
   )
 }

@@ -114,6 +114,11 @@ export const api = {
     get: (patientId) => data(`/patients/${patientId}/anamnesis`),
     save: (patientId, body) => data(`/patients/${patientId}/anamnesis`, { method: 'PUT', json: body }),
     versions: (patientId) => data(`/patients/${patientId}/anamnesis/versions`),
+    sign: (patientId, body) => data(`/patients/${patientId}/anamnesis/signature`, { method: 'POST', json: body }),
+    async signatureUrl(signatureId) {
+      const res = await request(`/anamnesis-signatures/${signatureId}/image`)
+      return URL.createObjectURL(await res.blob())
+    },
   },
 
   plans: {
