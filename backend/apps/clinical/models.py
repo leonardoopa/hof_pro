@@ -1,3 +1,4 @@
+import hashlib
 from decimal import Decimal
 
 from django.conf import settings
@@ -81,6 +82,34 @@ class AnamnesisVersionAnswer(models.Model):
 
     class Meta:
         ordering = ["question__order", "question_id"]
+
+
+ANAMNESIS_DECLARATION = (
+    "Declaro que as informações desta anamnese são verdadeiras e completas, que não omiti doença, medicamento, "
+    "alergia ou procedimento anterior, e que vou avisar sobre qualquer mudança antes de um novo procedimento."
+)
+
+
+class AnamnesisSignature(models.Model):
+    """Assinatura do paciente sobre uma versão da anamnese. A versão não muda mais, então a assinatura vale para ela;
+    alterar a anamnese cria uma versão nova, ainda sem assinatura."""
+
+    version = models.OneToOneField(AnamnesisVersion, on_delete=models.PROTECT, related_name="signature")
+    collected_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="+")
+    signer_name = models.CharField(max_length=150)
+    declaration = models.TextField()  # texto exato que o paciente leu ao assinar
+    image = models.BinaryField()  # PNG da assinatura; dado sensível, só sai pela API autenticada
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    signed_at = models.DateTimeField()
+    document_hash = models.CharField(max_length=64)
+
+
+def anamnesis_hash(*, version: "AnamnesisVersion", patient_id: int, declaration: str, signer_name: str, signed_at, image: bytes) -> str:
+    """SHA-256 das respostas da versão, da declaração e da assinatura: muda se qualquer uma delas mudar."""
+    parts = ["anamnese", str(patient_id), str(version.number), declaration, version.notes]
+    parts += [f"{a.question_text}|{'Sim' if a.answer else 'Não'}|{a.detail}" for a in version.answers.all()]
+    parts += [signer_name, signed_at.isoformat(), hashlib.sha256(bytes(image)).hexdigest()]
+    return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
 
 
 class Region(models.TextChoices):

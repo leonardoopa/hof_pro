@@ -111,11 +111,27 @@ class AnswerOut(ORM):
     detail: str
 
 
+class AnamnesisSignatureOut(BaseModel):
+    id: int
+    version: int
+    signer_name: str
+    signed_at: datetime
+    document_hash: str
+
+
+class AnamnesisSignIn(BaseModel):
+    signer_name: str = Field(min_length=2, max_length=150)
+    # PNG do canvas, como data URL ("data:image/png;base64,...") ou base64 puro.
+    signature: str = Field(min_length=20, max_length=600_000)
+
+
 class AnamnesisOut(BaseModel):
     answers: list[AnswerOut]
     notes: str
     updated_at: datetime | None
     version: int | None
+    signature: AnamnesisSignatureOut | None = None  # da versão atual; versão nova começa sem assinatura
+    declaration: str = ""
 
 
 class VersionAnswerOut(ORM):
@@ -131,6 +147,7 @@ class AnamnesisVersionOut(BaseModel):
     saved_by: str
     saved_at: datetime
     answers: list[VersionAnswerOut]
+    signature: AnamnesisSignatureOut | None = None
 
 
 # ---- planejamento ----

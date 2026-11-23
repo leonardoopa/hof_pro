@@ -36,6 +36,7 @@ def test_each_saved_change_becomes_a_version_and_older_ones_stay_as_they_were(cl
             {"question_id": alergia.id, "question_text": "Possui alergias?", "answer": False, "detail": ""},
             {"question_id": fumante.id, "question_text": "É fumante?", "answer": True, "detail": "10 por dia"},
         ],
+        "signature": None,  # o paciente ainda não assinou esta versão
     }
     assert client.get(f"{url}/versions", headers=auth).json() == [first]
 
